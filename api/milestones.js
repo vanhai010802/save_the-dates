@@ -1,6 +1,11 @@
 import {
-  verifyPassword, readData, writeData, readJsonBody, deletePrefix,
-  sendJson, handleError, HttpError,
+  deletePrefix,
+  handleError, HttpError,
+  readData,
+  readJsonBody,
+  sendJson,
+  verifyPassword,
+  writeData,
 } from './_lib.js';
 
 function sanitizeMilestone(input) {
@@ -50,6 +55,7 @@ export default async function handler(req, res) {
       const data = await readData();
       const before = data.milestones.length;
       data.milestones = data.milestones.filter(m => m.id !== id);
+      data.milestones = data.milestones.reverse(); 
       if (data.milestones.length === before) {
         throw new HttpError(404, 'Không tìm thấy mốc với id đó');
       }
