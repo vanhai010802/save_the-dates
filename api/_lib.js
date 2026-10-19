@@ -1,5 +1,6 @@
 import { put, list, del } from '@vercel/blob';
 import { timingSafeEqual } from 'node:crypto';
+import { redisConfigured, redisCommand, redisKey } from './_redis.js';
 
 // Mỗi write data sinh 1 pathname random (data-<hash>.json) thay vì cố định
 // "data.json". Vercel Blob CDN cache rất "dính" theo URL: nếu put đè cùng path
@@ -9,9 +10,10 @@ const DATA_PREFIX = 'data-';
 const DATA_SUFFIX = '.json';
 
 export class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -43,18 +45,29 @@ async function listDataBlobs() {
 
 export async function readData() {
   try {
+    if (redisConfigured()) {
+      const stored = await redisCommand(['GET', redisKey('story:v1')]);
+      if (stored !== null) return JSON.parse(stored);
+    }
     const blobs = await listDataBlobs();
     if (blobs.length === 0) return { config: {}, milestones: [], unlocked: false, unlocked_at: null };
     const newest = blobs[0];
     const res = await fetch(newest.url, { cache: 'no-store' });
-    if (!res.ok) throw new HttpError(500, `Không đọc được data: ${res.status}`);
+    if (res.status === 403) throw new HttpError(503, 'Kho dữ liệu đang bị Vercel chặn do vượt hạn mức. Cần mở lại quyền truy cập kho để khôi phục dữ liệu.', 'BLOB_STORE_BLOCKED');
+    if (!res.ok) throw new HttpError(502, `Không đọc được data: ${res.status}`);
     const json = await res.json();
-    return {
+    const data = {
       config: json.config || {},
       milestones: Array.isArray(json.milestones) ? json.milestones : [],
       unlocked: !!json.unlocked,
       unlocked_at: json.unlocked_at || null,
     };
+    if (redisConfigured()) {
+      const inserted = await redisCommand(['SET', redisKey('story:v1'), JSON.stringify(data), 'NX']);
+      // Another request may already have migrated and edited the story.
+      if (inserted === null) return JSON.parse(await redisCommand(['GET', redisKey('story:v1')]));
+    }
+    return data;
   } catch (err) {
     if (err instanceof HttpError) throw err;
     if (err.message?.includes('BLOB_READ_WRITE_TOKEN')) {
@@ -65,6 +78,10 @@ export async function readData() {
 }
 
 export async function writeData(data) {
+  if (redisConfigured()) {
+    await redisCommand(['SET', redisKey('story:v1'), JSON.stringify(data)]);
+    return;
+  }
   // Lấy danh sách bản cũ trước, viết bản mới, rồi xóa bản cũ.
   const oldBlobs = await listDataBlobs();
   await put(DATA_PREFIX + 'v' + DATA_SUFFIX, JSON.stringify(data, null, 2), {
@@ -99,7 +116,7 @@ export function handleError(res, err) {
   const status = err instanceof HttpError ? err.status : 500;
   const message = err instanceof HttpError ? err.message : 'Lỗi server không rõ';
   if (!(err instanceof HttpError)) console.error('Unexpected:', err);
-  sendJson(res, status, { error: message });
+  sendJson(res, status, { error: message, ...(err.code ? { code: err.code } : {}) });
 }
 
 export async function readJsonBody(req) {

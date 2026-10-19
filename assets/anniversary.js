@@ -3,6 +3,7 @@ import { withMontageAssets } from './montage-data.js';
 import { startTogetherPresence } from './together-presence.js';
 import { warmFilmMedia } from './film-media.js';
 import { setOptimizedImageSource } from './image-delivery.js';
+import { filmPlaybackMessage } from './film-playback.js';
 const $ = id => document.getElementById(id);
 const state = { config: {}, milestones: [] };
 let selectedMonth = 'all', currentMemory, currentPhoto = 0, toastTimer;
@@ -123,8 +124,8 @@ async function toggleMusic() {
 }
 function revealMemories() {
   if (!dataReady) { toast('Chờ chiếc hộp kỷ niệm tải xong rồi mình bắt đầu nhé.'); return; }
+  if(!film.open()){toast(filmPlaybackMessage());return;}
   document.querySelector('.cake-scene').classList.add('candles-out');
-  film.open();
 }
 if ($('cake-button')) {
   $('open-memories').addEventListener('click',revealMemories); $('cake-button').addEventListener('click',revealMemories);

@@ -1,8 +1,9 @@
 import { montageItems } from './montage-data.js';
 import { filmMediaURL as safeURL, getFilmMedia, loadFilmMedia } from './film-media.js';
+import { canPlayFilm, filmPlaybackState, completeFilmPlayback } from './film-playback.js';
 const FILM_DURATION = 180000;
 // A timed film made directly from the existing milestones and photo captions.
-export function createMemoryFilm(getData, audioElement = document.getElementById('background-music')) {
+export function createMemoryFilm(getData, audioElement = document.getElementById('background-music'), { test=false } = {}) {
   const dialog = document.createElement('dialog');
   dialog.className = 'memory-film';
   dialog.setAttribute('aria-label', 'Thước phim kỷ niệm của chúng mình');
@@ -15,7 +16,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   const $ = selector => dialog.querySelector(selector);
   const stage = $('.film-stage'), audio = audioElement;
   let scenes = [], index = 0, elapsed = 0, total = 0, offsets = [], playing = false, ended = false;
-  let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0;
+  let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0, revealTimer, completed=false, playbackCycle;
   const make = (tag, className, text) => { const el=document.createElement(tag);el.className=className;if(text!==undefined)el.textContent=String(text).normalize('NFC');return el; };
   const formatDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('.') : '';
   const clock = ms => `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
@@ -49,7 +50,8 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   function playAudio() { if(sound && playing)audio.play().catch(()=>{sound=false;updateSound();}); }
   function updateSound(){ $('.film-sound').setAttribute('aria-pressed',String(sound));$('.film-sound').setAttribute('aria-label',sound?'Tắt nhạc thước phim':'Bật nhạc thước phim');$('.film-sound span').textContent=sound?'Nhạc bật':'Nhạc tắt'; }
   function setPlaying(value) {
-    playing=value;dialog.classList.toggle('film-paused',!playing);$('.film-play').textContent=ended?'↻':playing?'Ⅱ':'▷';$('.film-play').setAttribute('aria-label',ended?'Xem lại thước phim':playing?'Tạm dừng thước phim':'Phát thước phim');
+    if(value && completed && !test)return;
+    playing=value;dialog.classList.toggle('film-paused',!playing);$('.film-play').textContent=completed&&!test?'✓':ended?'↻':playing?'Ⅱ':'▷';$('.film-play').setAttribute('aria-label',completed&&!test?'Phim đã phát xong':ended?'Xem lại thước phim':playing?'Tạm dừng thước phim':'Phát thước phim');
     stage.querySelectorAll('.film-scene:not(.film-leaving) video').forEach(video=>playing ? video.play().catch(()=>{}) : video.pause());
     if(playing)playAudio();else audio.pause();lastTime=performance.now();
   }
@@ -59,20 +61,38 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     $('.film-seek').value=String(Math.round(position/total*1000));
     $('.film-seek').style.setProperty('--film-progress',`${position/total*100}%`);
     $('.film-scene-count').textContent=`${String(index+1).padStart(2,'0')} / ${scenes.length}`;
-    $('.film-previous').disabled=index===0;$('.film-next').disabled=index===scenes.length-1;
+    $('.film-previous').disabled=completed&&!test || index===0;$('.film-next').disabled=completed&&!test || index===scenes.length-1;
   }
   function showScene(next,progress=0){
-    token++;const currentToken=token;
+    if(completed && !test)return;
+    token++;const currentToken=token;clearTimeout(revealTimer);
     index=Math.max(0,Math.min(scenes.length-1,next));elapsed=progress;ended=false;
     const scene=scenes[index], card=make('section',`film-scene film-${scene.type} film-variant-${(scene.chapter ?? index)%3}`);
+    if(scene.chapter!==undefined)card.dataset.chapter=String(scene.chapter);
     let mounted=false;
     const mount=()=>{
       if(mounted || currentToken!==token)return;mounted=true;
       stage.querySelectorAll('.film-leaving').forEach(el=>el.remove());
       const old=stage.lastElementChild;
-      if(old){old.querySelectorAll('video').forEach(v=>v.pause());old.classList.add('film-leaving');old.setAttribute('aria-hidden','true');old.inert=true;}
+      const dissolvePhotos=old?.classList.contains('film-photo') && scene.type==='photo' && old.dataset.chapter===String(scene.chapter);
+      if(old){
+        old.querySelectorAll('video').forEach(v=>v.pause());
+        if(dissolvePhotos){
+          // Retain only the outgoing image, never an earlier chapter's words.
+          old.querySelectorAll('.film-copy,.film-ornament,.film-wish-sparks').forEach(el=>el.remove());
+          old.classList.add('film-leaving');old.setAttribute('aria-hidden','true');old.inert=true;
+        }else old.remove();
+      }
       if(!playing)card.classList.add('film-static-enter');
-      stage.append(card);if(old)setTimeout(()=>old.remove(),700);
+      const reveal=()=>{
+        if(currentToken!==token || !dialog.open)return;
+        stage.append(card);
+      };
+      // At chapter boundaries, clear the old scene first and leave a short
+      // empty beat before showing the new text. Never overlap the two layouts.
+      if(old && !dissolvePhotos)revealTimer=setTimeout(reveal,120);
+      else reveal();
+      if(dissolvePhotos)setTimeout(()=>old.remove(),700);
     };
     card.setAttribute('aria-label',scene.title);card.style.setProperty('--scene-duration',`${scene.duration}ms`);if(!playing)card.classList.add('film-static-enter');
     const copy=make('div','film-copy');copy.append(make('span','film-kicker',scene.kicker),make('h2','film-title',scene.title),make('p','film-description',scene.description));
@@ -102,7 +122,11 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
       ornament.innerHTML='<svg viewBox="0 0 160 100"><path class="film-heart-path" d="M10 60h33l9-14 11 30 11-53 12 37h15c-25-18-14-42 2-28 17-15 32 8 2 28h44"/></svg>';
       card.append(ornament);
       if(scene.type==='intro')card.append(make('div','film-wish-sparks','✧　 ♡　 ✧'));
-      if(scene.type==='outro'){copy.append(make('span','film-signature',scene.names));const replay=make('button','film-replay','↻  Xem lại từ đầu');replay.type='button';replay.addEventListener('click',()=>{setPlaying(true);showScene(0);});copy.append(replay);}
+      if(scene.type==='outro'){
+        copy.append(make('span','film-signature',scene.names));
+        if(test){const replay=make('button','film-replay','↻  Xem lại từ đầu');replay.type='button';replay.addEventListener('click',()=>{setPlaying(true);showScene(0);});copy.append(replay);}
+        else copy.append(make('p','film-complete-note','Phim chỉ phát một lần. Bấm Reset BK để mở lượt xem mới.'));
+      }
     }
     card.append(copy);
     // Text is available immediately; late media joins only its own current scene.
@@ -122,7 +146,10 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
       const position=Math.min(total,offsets[index]+elapsed+Math.max(0,now-lastTime));
       const next=offsets.findLastIndex(start=>start<=position);
       if(next!==index)showScene(next,position-offsets[next]);else elapsed=position-offsets[index];
-      if(position>=total){elapsed=total-offsets[index];ended=true;setPlaying(false);}
+      if(position>=total){
+        elapsed=total-offsets[index];ended=true;completed=true;setPlaying(false);
+        if(!test){$('.film-play').disabled=true;$('.film-seek').disabled=true;completeFilmPlayback(playbackCycle);}
+      }
       updateProgress();
     }
     lastTime=now;frame=requestAnimationFrame(tick);
@@ -135,11 +162,15 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   $('.film-seek').addEventListener('input',e=>{const target=Number(e.target.value)/1000*total;const next=offsets.findLastIndex(start=>start<=target);showScene(next,Math.min(target-offsets[next],scenes[next].duration));});
   dialog.addEventListener('keydown',e=>{if($('.film-play').disabled && e.key!=='Escape')return;if(e.target.matches('input,button') && (e.code==='Space' || e.key==='Enter'))return;if(e.code==='Space'){e.preventDefault();toggle();}else if(e.key==='ArrowLeft' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index-1);}else if(e.key==='ArrowRight' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index+1);}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden && dialog.open)setPlaying(false);});
-  dialog.addEventListener('close',()=>{cancelAnimationFrame(frame);token++;setPlaying(false);stage.replaceChildren();if(audioWasPlaying)audio.play().catch(()=>{});});
+  window.addEventListener('film-presence-left',()=>{if(!test && dialog.open)dialog.close();});
+  dialog.addEventListener('close',()=>{cancelAnimationFrame(frame);clearTimeout(revealTimer);token++;setPlaying(false);stage.replaceChildren();if(audioWasPlaying)audio.play().catch(()=>{});});
   return {close(){dialog.close();},open(){
-    if(dialog.open)return;
+    if(dialog.open || (!test && !canPlayFilm()))return false;
+    playbackCycle=filmPlaybackState().cycle;completed=false;ended=false;
+    $('.film-play').disabled=false;$('.film-seek').disabled=false;
     buildScenes();audioWasPlaying=!audio.paused;sound=true;updateSound();dialog.showModal();
     stage.replaceChildren();
     setPlaying(!document.hidden);showScene(0);frame=requestAnimationFrame(tick);$('.film-play').focus();
+    return true;
   }};
 }

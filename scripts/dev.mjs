@@ -3,13 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { PRESENCE_TTL, validVisitor, summarizePresence, presencePath } from '../api/_presence.js';
+import { transitionPresence } from '../api/_presence-state.js';
+import { validVisitor } from '../api/_presence.js';
 const root = resolve(fileURLToPath(new URL('../',import.meta.url)));
 const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.mp3':'audio/mpeg','.mp4':'video/mp4','.jpg':'image/jpeg','.png':'image/png','.json':'application/json; charset=utf-8'};
 let snapshot;
 const uploads=new Map();
-const visitors=new Map();
-let celebration={cycle:'initial',targets:[]};
+let presenceState=null;
 createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   res.setHeader('Cache-Control','no-store');
@@ -20,13 +20,11 @@ createServer(async(req,res)=>{
     if(url.pathname==='/api/presence' && req.method==='POST'){
       try{
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
-        if(body.action==='reset'){if(req.headers['x-admin-password']!=='demo'){res.writeHead(401);res.end('{"error":"Sai mật khẩu"}');return;}celebration={cycle:`${Date.now()}_${randomUUID()}`,targets:[]};res.end(JSON.stringify({ok:true,cycle:celebration.cycle}));return;}
-        if(!validVisitor(body.visitorId) || !validVisitor(body.userId) || typeof body.active!=='boolean' || !Number.isSafeInteger(body.sequence) || body.sequence<1)throw Error('invalid');
-        const now=Date.now(),before=summarizePresence([...visitors.values()],now),previous=before.latest.get(body.visitorId);
-        const since=previous?.active && previous.userId===body.userId && now-previous.timestamp<PRESENCE_TTL?previous.since:now;
-        const pathname=presencePath({...body,timestamp:now,since});if(!previous || previous.sequence<body.sequence)visitors.set(pathname,{pathname,url:pathname});
-        const result=summarizePresence([...visitors.values()],now);for(const url of result.expired)visitors.delete(url);
-        res.end(JSON.stringify({count:result.count,cycle:`${celebration.cycle}:${result.togetherSince ?? 'waiting'}`,together:body.active && result.visitors.has(body.visitorId) && result.together}));
+        if(body.action==='reset'){
+          if(req.headers['x-admin-password']!=='demo'){res.writeHead(401);res.end('{"error":"Sai mật khẩu"}');return;}
+        }else if(!validVisitor(body.visitorId) || !validVisitor(body.userId) || typeof body.active!=='boolean' || !Number.isSafeInteger(body.sequence) || body.sequence<1)throw Error('invalid');
+        const now=Date.now(),next=transitionPresence(presenceState,body,now,`${now}_${randomUUID()}`);
+        presenceState=next.state;res.end(JSON.stringify(next.result));
       }catch{res.writeHead(400);res.end('{"error":"Thiết bị không hợp lệ"}');}return;
     }
     // Local preview reads the public existing data. It never writes to production.
