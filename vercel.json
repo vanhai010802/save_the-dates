@@ -1,4 +1,17 @@
 {
+  "images": {
+    "sizes": [640, 1080],
+    "qualities": [70],
+    "formats": ["image/webp"],
+    "minimumCacheTTL": 86400,
+    "localPatterns": [{ "pathname": "^/assets/montage/.*$", "search": "" }],
+    "remotePatterns": [{
+      "protocol": "https",
+      "hostname": "^hyx28w95uynwxibt\\.public\\.blob\\.vercel-storage\\.com$",
+      "port": "",
+      "pathname": "^/(milestones|avatars)/.*$"
+    }]
+  },
   "rewrites": [
     { "source": "/", "destination": "/anniversary.html" },
     { "source": "/our-story", "destination": "/index.html" }

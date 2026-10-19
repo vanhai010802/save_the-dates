@@ -28,3 +28,5 @@
 @media(max-width:640px){.film-montage .film-photo-frame{width:100%;height:95%;max-height:none;flex-basis:auto}}
 
 .film-loading{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;color:var(--film-cream);font-size:14px}
+
+.film-awaiting{flex-direction:column!important;text-align:center}.film-awaiting .film-photo-frame,.film-awaiting .film-photo-wash{display:none}.film-awaiting .film-copy{flex:none;max-width:800px}.film-awaiting .film-description{margin-inline:auto}

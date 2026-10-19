@@ -744,6 +744,8 @@
   <script type="module">
     import { startTogetherPresence, createTogetherCake } from '/assets/together-presence.js';
     import { withMontageAssets } from '/assets/montage-data.js';
+    import { warmFilmMedia } from '/assets/film-media.js';
+    import { setOptimizedImageSource } from '/assets/image-delivery.js';
     // ============== STATE ==============
     const state = { config: {}, milestones: [], unlocked: false, unlocked_at: null };
 
@@ -826,6 +828,7 @@
       state.milestones = Array.isArray(json.milestones) ? json.milestones : [];
       state.unlocked = !!json.unlocked;
       state.unlocked_at = json.unlocked_at || null;
+      warmFilmMedia(state);
     }
 
     // ============== ADMIN AUTH ==============
@@ -977,8 +980,8 @@
           const img = document.createElement('img');
           img.alt = '';
           img.loading = 'lazy';
-          img.src = m.type === 'video' ? defaultVideoThumb() : m.url;
-          img.onerror = () => { img.onerror = null; img.src = defaultAvatar(); };
+          if(m.type === 'video')img.src=defaultVideoThumb();
+          else setOptimizedImageSource(img,m.url,640,()=>{img.src=defaultAvatar();});
           btn.appendChild(img);
           if (m.type === 'video') {
             const play = document.createElement('span');
@@ -1027,7 +1030,7 @@
         lbContent.appendChild(v);
       } else {
         const img = document.createElement('img');
-        img.src = item.url;
+        setOptimizedImageSource(img,item.url);
         img.alt = '';
         lbContent.appendChild(img);
       }

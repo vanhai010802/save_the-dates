@@ -1,4 +1,5 @@
 import { montageItems } from './montage-data.js';
+import { filmMediaURL as safeURL, getFilmMedia, loadFilmMedia } from './film-media.js';
 // A timed film made directly from the existing milestones and photo captions.
 export function createMemoryFilm(getData, audioElement = document.getElementById('background-music')) {
   const dialog = document.createElement('dialog');
@@ -13,12 +14,8 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   const $ = selector => dialog.querySelector(selector);
   const stage = $('.film-stage'), audio = audioElement;
   let scenes = [], index = 0, elapsed = 0, total = 0, offsets = [], playing = false, ended = false;
-  let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, loadTimer, token = 0, opening = 0;
-  const photos = new Map();
+  let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0;
   const make = (tag, className, text) => { const el=document.createElement(tag);el.className=className;if(text!==undefined)el.textContent=String(text).normalize('NFC');return el; };
-  // Older milestone records may still contain http links. Upgrade them before
-  // loading so https pages do not lose those photos to mixed-content blocking.
-  const safeURL = value => { try { const url=new URL(value,location.href);if(url.protocol==='http:' && location.protocol==='https:')url.protocol='https:';return /^https?:$/.test(url.protocol)?url.href:''; } catch { return ''; } };
   const formatDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('.') : '';
   const clock = ms => `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   function buildScenes() {
@@ -64,7 +61,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     $('.film-previous').disabled=index===0;$('.film-next').disabled=index===scenes.length-1;
   }
   function showScene(next,progress=0){
-    token++;const currentToken=token;clearTimeout(loadTimer);
+    token++;const currentToken=token;
     index=Math.max(0,Math.min(scenes.length-1,next));elapsed=progress;ended=false;
     const scene=scenes[index], card=make('section',`film-scene film-${scene.type} film-variant-${(scene.chapter ?? index)%3}`);
     let mounted=false;
@@ -80,14 +77,25 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     const copy=make('div','film-copy');copy.append(make('span','film-kicker',scene.kicker),make('h2','film-title',scene.title),make('p','film-description',scene.description));
     if(scene.type==='photo' || scene.type==='montage'){
       const photo=make('div','film-photo-frame'), background=make('div','film-photo-wash');
-      const media=photos.get(safeURL(scene.media.url)) || make(scene.media.type==='video'?'video':'img','film-media');
-      let resolved=false;
-      const ready=()=>{if(resolved || currentToken!==token)return;resolved=true;clearTimeout(loadTimer);card.classList.add('film-media-ready');mount();if(media.tagName==='VIDEO' && playing)media.play().catch(()=>{});};
-      const failed=()=>{if(currentToken!==token)return;media.hidden=true;background.hidden=true;photo.append(make('span','film-missing-photo','♡'));ready();};
-      if(media.tagName==='VIDEO'){media.muted=true;media.playsInline=true;media.preload='auto';media.addEventListener('loadeddata',()=>{if(progress>0)media.currentTime=Math.min(progress/1000,Math.max(0,media.duration-.1));ready();},{once:true});}
-      else {media.alt=scene.media.caption || scene.title;media.addEventListener('load',()=>media.decode().catch(()=>{}).then(ready),{once:true});background.style.backgroundImage=`url(${JSON.stringify(safeURL(scene.media.url))})`;}
-      media.addEventListener('error',failed,{once:true});if(!media.src)media.src=safeURL(scene.media.url);photo.append(media);if(media.tagName==='IMG' && media.complete && media.naturalWidth)ready();if(media.tagName==='VIDEO' && media.readyState>=2){media.currentTime=progress/1000;ready();}if(scene.type==='photo')photo.append(make('span','film-photo-number',`MEMORY ${String(scene.chapter+1).padStart(2,'0')} / FRAME ${String(scene.photo+1).padStart(2,'0')}`));card.append(background,photo);
-      loadTimer=setTimeout(()=>{if(currentToken===token){if(!resolved)failed();}},8000);
+      card.classList.add('film-awaiting');card.append(background,photo);
+      const attach=media=>{
+        if(!media || currentToken!==token || !dialog.open)return;
+        media.hidden=false;
+        if(media.tagName==='VIDEO'){
+          media.currentTime=Math.min(elapsed/1000,Math.max(0,media.duration-.1));
+          if(playing)media.play().catch(()=>{});else media.pause();
+        }else{
+          media.alt=scene.media.caption || scene.title;
+          background.style.backgroundImage=`url(${JSON.stringify(media.currentSrc || media.src)})`;
+        }
+        photo.append(media);
+        if(scene.type==='photo')photo.append(make('span','film-photo-number',`MEMORY ${String(scene.chapter+1).padStart(2,'0')} / FRAME ${String(scene.photo+1).padStart(2,'0')}`));
+        copy.hidden=scene.type==='montage';
+        card.classList.remove('film-awaiting');card.classList.add('film-media-ready');
+      };
+      const url=safeURL(scene.media.url), cached=getFilmMedia(url);
+      if(cached)attach(cached);
+      else void loadFilmMedia(url,scene.media.type).then(ok=>{if(ok)attach(getFilmMedia(url));});
     }else{
       const ornament=make('div','film-ornament');ornament.setAttribute('aria-hidden','true');
       ornament.innerHTML='<svg viewBox="0 0 160 100"><path class="film-heart-path" d="M10 60h33l9-14 11 30 11-53 12 37h15c-25-18-14-42 2-28 17-15 32 8 2 28h44"/></svg>';
@@ -95,13 +103,17 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
       if(scene.type==='intro')card.append(make('div','film-wish-sparks','✧　 ♡　 ✧'));
       if(scene.type==='outro'){copy.append(make('span','film-signature',scene.names));const replay=make('button','film-replay','↻  Xem lại từ đầu');replay.type='button';replay.addEventListener('click',()=>{setPlaying(true);showScene(0);});copy.append(replay);}
     }
-    if(scene.type!=='montage')card.append(copy);
-    // Keep the previous frame intact until the next image is decoded, then
-    // dissolve over it without showing an empty frame or changing photo sides.
-    if(!scene.media)mount();
+    card.append(copy);
+    // Text is available immediately; late media joins only its own current scene.
+    mount();
+    prefetchUpcoming();
     $('.film-announcement').textContent=`${index+1} / ${scenes.length}: ${scene.title}`;
     $('.film-play').textContent=playing?'Ⅱ':'▷';$('.film-play').setAttribute('aria-label',playing?'Tạm dừng thước phim':'Phát thước phim');
     lastTime=performance.now();updateProgress();
+  }
+  function prefetchUpcoming(){
+    const upcoming=scenes.slice(index+1).filter(scene=>scene.media).slice(0,6);
+    for(const scene of upcoming)void loadFilmMedia(safeURL(scene.media.url),scene.media.type,'auto');
   }
   function tick(now){
     if(!dialog.open)return;
@@ -122,38 +134,11 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   $('.film-seek').addEventListener('input',e=>{const target=Number(e.target.value)/1000*total;const next=offsets.findLastIndex(start=>start<=target);showScene(next,Math.min(target-offsets[next],scenes[next].duration));});
   dialog.addEventListener('keydown',e=>{if($('.film-play').disabled && e.key!=='Escape')return;if(e.target.matches('input,button') && (e.code==='Space' || e.key==='Enter'))return;if(e.code==='Space'){e.preventDefault();toggle();}else if(e.key==='ArrowLeft' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index-1);}else if(e.key==='ArrowRight' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index+1);}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden && dialog.open)setPlaying(false);});
-  dialog.addEventListener('close',()=>{opening++;cancelAnimationFrame(frame);clearTimeout(loadTimer);token++;setPlaying(false);stage.replaceChildren();if(audioWasPlaying)audio.play().catch(()=>{});});
-  async function preloadPhoto(url,type) {
-    if(photos.has(url))return true;
-    for(let attempt=0;attempt<2;attempt++){
-      const img=make(type==='video'?'video':'img','film-media');
-      if(type==='video'){img.muted=true;img.playsInline=true;img.preload='auto';}else img.decoding='async';
-      const ok=await new Promise(resolve=>{
-        const timeout=setTimeout(()=>{img.src='';resolve(false);},20000);
-        if(type==='video')img.onloadeddata=()=>{clearTimeout(timeout);resolve(true);};
-        else img.onload=()=>{clearTimeout(timeout);img.decode().catch(()=>{}).then(()=>resolve(img.naturalWidth>0));};
-        img.onerror=()=>{clearTimeout(timeout);resolve(false);};img.src=url;
-      });
-      if(ok){photos.set(url,img);return true;}
-    }
-    return false;
-  }
-  return {close(){dialog.close();},async open(){
+  dialog.addEventListener('close',()=>{cancelAnimationFrame(frame);token++;setPlaying(false);stage.replaceChildren();if(audioWasPlaying)audio.play().catch(()=>{});});
+  return {close(){dialog.close();},open(){
     if(dialog.open)return;
-    const session=++opening;
-    buildScenes();audioWasPlaying=!audio.paused;sound=true;updateSound();dialog.showModal();setPlaying(false);
-    // Unlock audio during the click, before asynchronous media preparation.
-    audio.play().then(()=>{if(session===opening && !playing)audio.pause();}).catch(()=>{});
-    const notice=make('p','film-loading','Đang tải ảnh để thước phim chạy liền mạch…');stage.replaceChildren(notice);
-    const controls=[...dialog.querySelectorAll('.film-play,.film-previous,.film-next,.film-seek')];controls.forEach(el=>el.disabled=true);
-    const urls=[...new Set(scenes.filter(scene=>scene.media).map(scene=>safeURL(scene.media.url)))];
-    let cursor=0,done=0;
-    await Promise.all(Array.from({length:4},async()=>{while(cursor<urls.length && session===opening){const url=urls[cursor++];await preloadPhoto(url,scenes.find(scene=>scene.media && safeURL(scene.media.url)===url).media.type);done++;notice.textContent=`Đang tải ảnh ${done}/${urls.length}…`;}}));
-    if(session!==opening || !dialog.open)return;
-    scenes=scenes.filter(scene=>!scene.media || photos.has(safeURL(scene.media.url)));
-    fitTimeline();stage.replaceChildren();controls.forEach(el=>el.disabled=false);
+    buildScenes();audioWasPlaying=!audio.paused;sound=true;updateSound();dialog.showModal();
+    stage.replaceChildren();
     setPlaying(!document.hidden);showScene(0);frame=requestAnimationFrame(tick);$('.film-play').focus();
   }};
 }
-
-
