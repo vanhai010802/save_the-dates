@@ -21,7 +21,7 @@ export function element(tag, className, text) {
   if (text !== undefined) el.textContent = text; return el;
 }
 export function safeMedia(url) {
-  try { const parsed = new URL(url); return ['https:', 'http:'].includes(parsed.protocol) ? parsed.href : ''; } catch { return ''; }
+  try { const parsed = new URL(url); if (parsed.protocol === 'http:') parsed.protocol = 'https:'; return parsed.protocol === 'https:' ? parsed.href : ''; } catch { return ''; }
 }
 function dateLabel(date) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date.split('-').reverse().join('.') : '';

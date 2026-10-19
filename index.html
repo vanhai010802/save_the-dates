@@ -1112,7 +1112,7 @@
       try{
         const response=await fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json','x-admin-password':getPass()},body:JSON.stringify({action:'reset'})});
         if(!response.ok){const error=await response.json();throw Error(error.error || 'Không reset được bánh kem');}
-        showToast('Đã Reset BK — đủ 2 tab đang mở sẽ hiện bánh kem lại');
+        showToast('Đã Reset BK — hai người cùng mở tab đủ 5 giây sẽ hiện bánh kem lại');
         window.dispatchEvent(new Event('bk-reset'));
       }catch(error){showToast(error.message,true);}finally{button.disabled=false;}
     });

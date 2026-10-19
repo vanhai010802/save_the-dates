@@ -12,16 +12,18 @@ The local preview reads the public existing website data, and edits only a tempo
 
 Open the pencil button on `/our-story`, sign into the original panel, and click **Test bánh kem**. The cake popup opens immediately on one device and its button opens the film. This preview can be repeated and does not mark the automatic cake as shown.
 
-Both `/` and `/our-story` send an anonymous heartbeat every 8 seconds after loading. Each open page instance counts separately, so two tabs can test the rule. Background tabs, the heart unlock screen, and scrolling away from the hero do not disqualify an open page. Closed pages send a best-effort leave signal; heartbeats expire after 90 seconds to accommodate background timer throttling. Frozen tabs cannot refresh until the browser resumes them.
+Both `/` and `/our-story` send an anonymous heartbeat every second while visible. Use separate browser profiles, an incognito context, or two devices to test two distinct users. Scrolling away from the hero does not disqualify a visible page.
 
-The automatic cake is shown once globally per reset cycle, to the pages present when at least two participants are detected. Reloading or opening new tabs does not replay it. The original panel's authenticated **Reset BK** button creates a new cycle, allowing the next two open participants to trigger it again. **Test bánh kem** remains independent and repeatable. Existing tabs continue heartbeats after showing the cake so a reset works without reopening them.
+The automatic cake requires two distinct browser identities with visible tabs and continuous heartbeats for five seconds. Extra tabs in the same browser count as one person. Hiding or closing a tab sends a disconnect and closes its cake and film; the other participant closes theirs on the next heartbeat. Lost connections expire after four seconds. Returning starts a fresh five-second wait. **Reset BK** allows the currently connected pair to open the cake again; **Test bánh kem** remains independent and repeatable.
 
-Production `/api/presence` uses independent short-lived `presence/` records and persistent `celebration/` reset/event markers in the existing Blob store. Expired heartbeats are cleaned up; celebration markers survive server restarts. The local demo stores both presence and reset state in memory only.
+The memory film preloads media with four concurrent requests and retries a failed load once. Media that still cannot load is excluded instead of showing empty photo frames. After preparation, the playback timeline lasts exactly 120 seconds, preserving video clip durations where possible and fitting the other scenes into the remaining time. Loading and deliberate pauses are outside the playback duration.
+
+Production `/api/presence` uses independent short-lived `presence/` records and persistent `celebration/` reset markers in the existing Blob store. Expired heartbeats are cleaned up; celebration markers survive server restarts. The local demo stores both presence and reset state in memory only.
 
 ## Film and supplied media
 
-Existing milestones play chronologically. Milestones with four or more photos use 1 second per photo; milestones with up to three photos use 2 seconds. The film includes pause, seek, previous/next, music, replay, reduced-motion support, and pause when the tab is hidden.
+Existing milestones play chronologically. Photo scene weights start at 1 second for milestones with four or more photos, or 2 seconds for smaller albums, then scale to fit the two-minute timeline. The film includes pause, seek, previous/next, music, replay, reduced-motion support, and pause when the tab is hidden.
 
-Immediately before “Mình còn cả mai sau”, **Những khoảnh khắc của đôi ta** plays the supplied Hh folder: 13 photos and 2 videos. Photos last 1.5 seconds, while videos play for their recorded durations. This sequence has no photo captions and creates no milestones.
+Immediately before “Mình còn cả mai sau”, **Những khoảnh khắc của đôi ta** plays the supplied Hh folder: 13 photos and 2 videos. Photo scene weights start at 1.5 seconds before timeline scaling; videos retain their recorded durations when they fit within the timeline. This sequence has no photo captions and creates no milestones.
 
 Web-ready copies are stored in `assets/montage/` with their ordering and video durations in `manifest.json`. Photos were converted to JPEG with EXIF orientation applied and maximum dimensions of 2048 pixels. The two MOV clips were converted to H.264/AAC MP4 with fast-start metadata. Source files were left unchanged. Both frontends load the manifest directly, without uploading the supplied files to production or modifying the production story data. Deploying the repository will serve these assets with the site.

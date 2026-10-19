@@ -26,3 +26,5 @@
 .film-montage .film-photo-frame{flex:0 1 80%;width:80%;max-width:1000px;height:94%;padding:0;background:transparent;box-shadow:none;transform:none;animation:film-photo-drift var(--scene-duration) linear both}
 .film-montage .film-media{background:transparent;object-fit:contain}
 @media(max-width:640px){.film-montage .film-photo-frame{width:100%;height:95%;max-height:none;flex-basis:auto}}
+
+.film-loading{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;color:var(--film-cream);font-size:14px}

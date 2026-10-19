@@ -17,7 +17,7 @@ export function createTogetherCake(getData, { test = false, audioElement } = {})
   if(!audioElement){audioElement=document.createElement('audio');audioElement.src='/assets/music.mp3';audioElement.loop=true;audioElement.preload='none';document.body.append(audioElement);}
   modal.querySelector('.together-close').addEventListener('click',()=>modal.close());
   modal.querySelector('.together-watch').addEventListener('click',()=>{modal.close();if(!film)film=createMemoryFilm(getData,audioElement);film.open();});
-  return {async open(){
+  return {close(){modal.close();film?.close();},async open(){
     if(modal.open)return;modal.showModal();
     try{
       const response=await fetch('/anniversary.html');if(!response.ok)return;
@@ -32,29 +32,41 @@ export function startTogetherPresence(getData) {
   if (started) return; started = true;
   const hero = document.querySelector('#app .hero, .anniversary-hero');
   loadStyles();
-  // A page instance is a participant, including duplicated tabs. Browser-wide
-  // storage would merge both tabs, and a copied session ID has the same issue.
   const visitorId=crypto.randomUUID();
-  let pending=false, shownCycle=null, stopped=false, interval;
-  const status=document.createElement('p');status.className='together-presence-status';status.setAttribute('role','status');status.textContent='♡ Đang chờ người thương cùng ghé thăm…';hero.append(status);
+  let userId;
+  try { userId=localStorage.getItem('together-user-id');if(!/^[a-f0-9-]{36}$/i.test(userId || '')){userId=crypto.randomUUID();localStorage.setItem('together-user-id',userId);} }
+  catch { userId=crypto.randomUUID(); }
+  let pending=false, shownCycle=null, stopped=false, generation=0, sequence=0, controller;
+  const status=document.createElement('p');status.className='together-presence-status';status.setAttribute('role','status');hero.append(status);
   const celebration=createTogetherCake(getData,{audioElement:document.getElementById('bg-music') || document.getElementById('background-music')});
-  const eligible=()=>!stopped;
-  async function showCake(cycle){
-    if(shownCycle===cycle || !eligible())return;shownCycle=cycle;status.textContent='♡ Hai đứa đều đang ở đây';
-    await celebration.open();
+  const eligible=()=>!stopped && !document.hidden;
+  const payload=active=>JSON.stringify({visitorId,userId,active,sequence:++sequence});
+  function closeCake(){celebration.close();shownCycle=null;}
+  function leave(){
+    generation++;controller?.abort();pending=false;closeCake();
+    status.textContent='♡ Đang chờ người thương cùng ghé thăm…';
+    const body=payload(false);
+    if(!navigator.sendBeacon('/api/presence',new Blob([body],{type:'application/json'})))fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json'},body,keepalive:true}).catch(()=>{});
   }
   async function pulse(){
-    if(!eligible() || pending)return;pending=true;
+    if(!eligible() || pending)return;
+    pending=true;const current=++generation;const requestController=new AbortController();controller=requestController;
+    const timeout=setTimeout(()=>requestController.abort(),3500);
     try{
-      const response=await fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({visitorId,active:true}),cache:'no-store',signal:AbortSignal.timeout(12000)});
+      const response=await fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json'},body:payload(true),cache:'no-store',signal:controller.signal});
       if(!response.ok)throw Error('presence');const data=await response.json();
-      if(eligible()){status.textContent=data.fired?'♡ Bánh kem đã mở · Reset BK trong panel để mở lại':data.count>=2?'♡ Hai đứa đều đang ở đây':'♡ Bạn đã ở đây · Chờ người thương thêm một chút nhé';if(data.together)await showCake(data.cycle);}
-    }catch{if(eligible())status.textContent='♡ Chưa kết nối được trạng thái online · Đang thử lại…';}finally{pending=false;}
+      if(current!==generation || !eligible())return;
+      status.textContent=data.together?'♡ Hai đứa đều đang ở đây':data.count>=2?'♡ Đủ hai đứa · Giữ kết nối 5 giây nhé':'♡ Bạn đã ở đây · Chờ người thương thêm một chút nhé';
+      if(data.together){if(shownCycle!==data.cycle){shownCycle=data.cycle;void celebration.open();}}
+      else closeCake();
+    }catch{
+      if(current===generation && eligible()){closeCake();status.textContent='♡ Chưa kết nối được trạng thái online · Đang thử lại…';leave();}
+    }finally{clearTimeout(timeout);if(current===generation)pending=false;}
   }
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)pulse();});
-  interval=setInterval(pulse,8000);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)leave();else pulse();});
+  setInterval(pulse,1000);
   pulse();
-  window.addEventListener('pagehide',()=>{stopped=true;clearInterval(interval);navigator.sendBeacon('/api/presence',new Blob([JSON.stringify({visitorId,active:false})],{type:'application/json'}));});
-  window.addEventListener('pageshow',event=>{if(event.persisted){stopped=false;interval=setInterval(pulse,8000);pulse();}});
-  window.addEventListener('bk-reset',pulse);
+  window.addEventListener('pagehide',()=>{stopped=true;leave();});
+  window.addEventListener('pageshow',event=>{if(event.persisted){stopped=false;pulse();}});
+  window.addEventListener('bk-reset',()=>{closeCake();pulse();});
 }
