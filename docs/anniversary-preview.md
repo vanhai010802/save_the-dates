@@ -6,13 +6,17 @@ Use Node.js 18 or newer. Run `npm ci` and `npm run dev`, then open http://localh
 - `/our-story`: the original Counting Love page and its original management drawer (pencil button).
 - `/admin` redirects to `/our-story`; the separate admin page was removed.
 
-The local preview reads the public existing website data, and edits only a temporary in-memory copy. The original drawer accepts `demo` in the local preview. Production uses the existing ADMIN_PASSWORD and Blob token. The production website has not been deployed by this change.
+The local preview reads the public existing website data, and edits only a temporary in-memory copy. The original drawer accepts `demo` in the local preview. Production uses the existing ADMIN_PASSWORD and Blob token.
 
 ## Test and together-online cake
 
 Open the pencil button on `/our-story`, sign into the original panel, and click **Test bánh kem**. The cake popup opens immediately on one device and its button opens the film. This preview can be repeated and does not mark the automatic cake as shown.
 
-After the original heart unlock, the visible couple hero sends an anonymous heartbeat every 8 seconds. When two independent browsers/devices are present, both show the same cake popup. Tabs sharing browser storage count as one device. The popup appears once per tab session. Hidden pages stop refreshing; heartbeats expire after 30 seconds. Production `/api/presence` uses independent short-lived records in the existing Blob store, with cleanup of old records. The demo uses memory. Cross-device production behavior requires deployment.
+Both `/` and `/our-story` send an anonymous heartbeat every 8 seconds after loading. Each open page instance counts separately, so two tabs can test the rule. Background tabs, the heart unlock screen, and scrolling away from the hero do not disqualify an open page. Closed pages send a best-effort leave signal; heartbeats expire after 90 seconds to accommodate background timer throttling. Frozen tabs cannot refresh until the browser resumes them.
+
+The automatic cake is shown once globally per reset cycle, to the pages present when at least two participants are detected. Reloading or opening new tabs does not replay it. The original panel's authenticated **Reset BK** button creates a new cycle, allowing the next two open participants to trigger it again. **Test bánh kem** remains independent and repeatable. Existing tabs continue heartbeats after showing the cake so a reset works without reopening them.
+
+Production `/api/presence` uses independent short-lived `presence/` records and persistent `celebration/` reset/event markers in the existing Blob store. Expired heartbeats are cleaned up; celebration markers survive server restarts. The local demo stores both presence and reset state in memory only.
 
 ## Film and supplied media
 

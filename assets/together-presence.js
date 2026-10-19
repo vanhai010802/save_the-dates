@@ -30,19 +30,17 @@ export function createTogetherCake(getData, { test = false, audioElement } = {})
 let started = false;
 export function startTogetherPresence(getData) {
   if (started) return; started = true;
-  const hero = document.querySelector('#app .hero');
+  const hero = document.querySelector('#app .hero, .anniversary-hero');
   loadStyles();
-  let visitorId;
-  try { visitorId=localStorage.getItem('love_visitor_id');if(!/^[a-f0-9-]{36}$/i.test(visitorId || '')){visitorId=crypto.randomUUID();localStorage.setItem('love_visitor_id',visitorId);} } catch { visitorId=crypto.randomUUID(); }
-  let shown=false;try{shown=sessionStorage.getItem('together_cake_shown')==='yes';}catch{}
-  if(shown)return;
-  let visible=false, pending=false, matched=false, stopped=false, interval;
+  // A page instance is a participant, including duplicated tabs. Browser-wide
+  // storage would merge both tabs, and a copied session ID has the same issue.
+  const visitorId=crypto.randomUUID();
+  let pending=false, shownCycle=null, stopped=false, interval;
   const status=document.createElement('p');status.className='together-presence-status';status.setAttribute('role','status');status.textContent='♡ Đang chờ người thương cùng ghé thăm…';hero.append(status);
-  const celebration=createTogetherCake(getData,{audioElement:document.getElementById('bg-music')});
-  const eligible=()=>visible && !document.hidden && !document.getElementById('app').hidden && !matched && !stopped;
-  async function showCake(){
-    if(matched || !eligible())return;matched=true;clearInterval(interval);observer.disconnect();status.textContent='♡ Hai đứa đều đang ở đây';
-    try{sessionStorage.setItem('together_cake_shown','yes');}catch{}
+  const celebration=createTogetherCake(getData,{audioElement:document.getElementById('bg-music') || document.getElementById('background-music')});
+  const eligible=()=>!stopped;
+  async function showCake(cycle){
+    if(shownCycle===cycle || !eligible())return;shownCycle=cycle;status.textContent='♡ Hai đứa đều đang ở đây';
     await celebration.open();
   }
   async function pulse(){
@@ -50,13 +48,13 @@ export function startTogetherPresence(getData) {
     try{
       const response=await fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({visitorId,active:true}),cache:'no-store',signal:AbortSignal.timeout(12000)});
       if(!response.ok)throw Error('presence');const data=await response.json();
-      if(eligible()){status.textContent=data.count>=2?'♡ Hai đứa đều đang ở đây':'♡ Bạn đã ở đây · Chờ người thương thêm một chút nhé';if(data.together)await showCake();}
+      if(eligible()){status.textContent=data.fired?'♡ Bánh kem đã mở · Reset BK trong panel để mở lại':data.count>=2?'♡ Hai đứa đều đang ở đây':'♡ Bạn đã ở đây · Chờ người thương thêm một chút nhé';if(data.together)await showCake(data.cycle);}
     }catch{if(eligible())status.textContent='♡ Chưa kết nối được trạng thái online · Đang thử lại…';}finally{pending=false;}
   }
-  const observer=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;status.hidden=!visible;if(visible)pulse();},{threshold:.2});observer.observe(hero);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)pulse();});
   interval=setInterval(pulse,8000);
-  // Keep the last heartbeat briefly after a match so the other device sees
-  // the same pair on its next poll, even if this person opens the film first.
-  window.addEventListener('pagehide',()=>{stopped=true;clearInterval(interval);observer.disconnect();if(!matched)navigator.sendBeacon('/api/presence',new Blob([JSON.stringify({visitorId,active:false})],{type:'application/json'}));},{once:true});
+  pulse();
+  window.addEventListener('pagehide',()=>{stopped=true;clearInterval(interval);navigator.sendBeacon('/api/presence',new Blob([JSON.stringify({visitorId,active:false})],{type:'application/json'}));});
+  window.addEventListener('pageshow',event=>{if(event.persisted){stopped=false;interval=setInterval(pulse,8000);pulse();}});
+  window.addEventListener('bk-reset',pulse);
 }

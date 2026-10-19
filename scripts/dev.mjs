@@ -9,6 +9,7 @@ const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-
 let snapshot;
 const uploads=new Map();
 const visitors=new Map();
+let celebration={cycle:'initial',targets:[]};
 createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   res.setHeader('Cache-Control','no-store');
@@ -17,7 +18,14 @@ createServer(async(req,res)=>{
   if(url.pathname.startsWith('/api/')){
     res.setHeader('Content-Type','application/json; charset=utf-8');
     if(url.pathname==='/api/presence' && req.method==='POST'){
-      try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());if(!validVisitor(body.visitorId) || typeof body.active!=='boolean')throw Error('invalid');const now=Date.now();for(const [id,lastSeen] of visitors)if(now-lastSeen>PRESENCE_TTL)visitors.delete(id);if(body.active)visitors.set(body.visitorId,now);else visitors.delete(body.visitorId);res.end(JSON.stringify({count:visitors.size,together:visitors.size>=2}));}catch{res.writeHead(400);res.end('{"error":"Thiết bị không hợp lệ"}');}return;
+      try{
+        const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
+        if(body.action==='reset'){if(req.headers['x-admin-password']!=='demo'){res.writeHead(401);res.end('{"error":"Sai mật khẩu"}');return;}celebration={cycle:`${Date.now()}_${randomUUID()}`,targets:[]};res.end(JSON.stringify({ok:true,cycle:celebration.cycle}));return;}
+        if(!validVisitor(body.visitorId) || typeof body.active!=='boolean')throw Error('invalid');
+        const now=Date.now();for(const [id,lastSeen] of visitors)if(now-lastSeen>PRESENCE_TTL)visitors.delete(id);if(body.active)visitors.set(body.visitorId,now);else visitors.delete(body.visitorId);
+        if(visitors.size>=2 && !celebration.targets.length)celebration.targets=[...visitors.keys()];
+        res.end(JSON.stringify({count:visitors.size,cycle:celebration.cycle,fired:celebration.targets.length>0,together:body.active && celebration.targets.includes(body.visitorId)}));
+      }catch{res.writeHead(400);res.end('{"error":"Thiết bị không hợp lệ"}');}return;
     }
     // Local preview reads the public existing data. It never writes to production.
     if(url.pathname==='/api/data' && req.method==='GET'){

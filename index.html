@@ -732,6 +732,7 @@
     </div>
     <div class="drawer-body" id="drawer-body"></div>
     <div style="padding:12px 20px;border-top:1px solid #ffe1e8"><button class="btn btn-primary" id="drawer-test-cake" style="width:100%">🎂 Test bánh kem</button></div>
+    <div style="padding:0 20px 12px"><button class="btn btn-ghost" id="drawer-reset-bk" style="width:100%">↻ Reset BK</button></div>
     <div class="drawer-foot">
       <button class="btn btn-ghost" id="drawer-logout">Đăng xuất</button>
       <button class="btn btn-danger" id="drawer-relock">Khóa lại trang</button>
@@ -1105,6 +1106,15 @@
       closeDrawer();
       testCelebration ??= createTogetherCake(()=>state,{test:true,audioElement:document.getElementById('bg-music')});
       testCelebration.open();
+    });
+    document.getElementById('drawer-reset-bk').addEventListener('click',async event=>{
+      const button=event.currentTarget;button.disabled=true;
+      try{
+        const response=await fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json','x-admin-password':getPass()},body:JSON.stringify({action:'reset'})});
+        if(!response.ok){const error=await response.json();throw Error(error.error || 'Không reset được bánh kem');}
+        showToast('Đã Reset BK — đủ 2 tab đang mở sẽ hiện bánh kem lại');
+        window.dispatchEvent(new Event('bk-reset'));
+      }catch(error){showToast(error.message,true);}finally{button.disabled=false;}
     });
     drawerBackdrop.addEventListener('click', closeDrawer);
     drawerLogout.addEventListener('click', () => { clearPass(); closeDrawer(); });
@@ -1726,11 +1736,11 @@
         });
       }
       showFirstRunBannerIfNeeded();
-      startTogetherPresence(() => state);
     }
     async function init() {
       try {
         await loadData();
+        startTogetherPresence(() => state);
         document.getElementById('loader').hidden = true;
         if (!state.unlocked) {
           showLockScreen();
