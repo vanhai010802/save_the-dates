@@ -29,4 +29,12 @@
 
 .film-loading{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;color:var(--film-cream);font-size:14px}
 
-.film-awaiting{flex-direction:column!important;text-align:center}.film-awaiting .film-photo-frame,.film-awaiting .film-photo-wash{display:none}.film-awaiting .film-copy{flex:none;max-width:800px}.film-awaiting .film-description{margin-inline:auto}
+.film-awaiting .film-photo-wash{display:none}.film-photo.film-awaiting .film-photo-frame{visibility:hidden}.film-montage.film-awaiting{flex-direction:column;text-align:center}.film-montage.film-awaiting .film-photo-frame{display:none}
+
+/* Keep the words still; only photos dissolve as the album advances. */
+.film-stage{background:radial-gradient(ellipse at 50% 40%,#49372c,#211e1b 75%)}
+.memory-film .film-scene{animation:none;background:transparent;will-change:auto}
+.memory-film .film-copy,.memory-film .film-copy *{animation:none!important;transition:none!important}
+.memory-film .film-scene.film-leaving .film-copy{visibility:hidden!important}
+.memory-film .film-scene:not(.film-leaving) .film-photo-frame{animation:film-dissolve .65s ease both,film-photo-drift var(--scene-duration) linear both}
+@media(prefers-reduced-motion:reduce){.memory-film .film-scene:not(.film-leaving) .film-photo-frame{animation:none!important}}

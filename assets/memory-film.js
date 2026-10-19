@@ -1,5 +1,6 @@
 import { montageItems } from './montage-data.js';
 import { filmMediaURL as safeURL, getFilmMedia, loadFilmMedia } from './film-media.js';
+const FILM_DURATION = 180000;
 // A timed film made directly from the existing milestones and photo captions.
 export function createMemoryFilm(getData, audioElement = document.getElementById('background-music')) {
   const dialog = document.createElement('dialog');
@@ -37,13 +38,13 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   }
   function fitTimeline() {
     // Preserve video clip lengths where possible; fit the remaining scenes into
-    // exactly two minutes regardless of the number of memories.
+    // exactly three minutes regardless of the number of memories.
     const videoTime=scenes.reduce((sum,scene)=>sum+(scene.media?.type==='video'?scene.duration:0),0);
-    const fixed=videoTime<100000?videoTime:0;
+    const fixed=videoTime<FILM_DURATION-20000?videoTime:0;
     const flexible=scenes.reduce((sum,scene)=>sum+(fixed && scene.media?.type==='video'?0:scene.duration),0);
-    scenes.forEach(scene=>{if(!(fixed && scene.media?.type==='video'))scene.duration=scene.duration/flexible*(120000-fixed);});
-    scenes.at(-1).duration+=120000-scenes.reduce((sum,scene)=>sum+scene.duration,0);
-    let offset=0;offsets=scenes.map(scene=>{const start=offset;offset+=scene.duration;return start;});total=120000;
+    scenes.forEach(scene=>{if(!(fixed && scene.media?.type==='video'))scene.duration=scene.duration/flexible*(FILM_DURATION-fixed);});
+    scenes.at(-1).duration+=FILM_DURATION-scenes.reduce((sum,scene)=>sum+scene.duration,0);
+    let offset=0;offsets=scenes.map(scene=>{const start=offset;offset+=scene.duration;return start;});total=FILM_DURATION;
   }
   function playAudio() { if(sound && playing)audio.play().catch(()=>{sound=false;updateSound();}); }
   function updateSound(){ $('.film-sound').setAttribute('aria-pressed',String(sound));$('.film-sound').setAttribute('aria-label',sound?'Tắt nhạc thước phim':'Bật nhạc thước phim');$('.film-sound span').textContent=sound?'Nhạc bật':'Nhạc tắt'; }
