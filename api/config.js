@@ -7,6 +7,7 @@ const ALLOWED_KEYS = [
   'start_date',
   'person1_name', 'person1_dob', 'person1_avatar_url',
   'person2_name', 'person2_dob', 'person2_avatar_url',
+  'anniversary_title', 'anniversary_message', 'anniversary_months',
 ];
 
 export default async function handler(req, res) {

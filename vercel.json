@@ -1,4 +1,9 @@
 {
+  "rewrites": [
+    { "source": "/", "destination": "/anniversary.html" },
+    { "source": "/our-story", "destination": "/index.html" }
+  ],
+  "redirects": [{ "source": "/admin", "destination": "/our-story", "permanent": false }],
   "headers": [
     {
       "source": "/api/data",

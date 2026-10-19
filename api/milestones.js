@@ -19,7 +19,7 @@ function sanitizeMilestone(input) {
     const url = String(m?.url || '');
     const type = m?.type === 'video' ? 'video' : 'image';
     if (!/^https?:\/\//.test(url)) throw new HttpError(400, 'media.url không hợp lệ');
-    return { url, type };
+    return { url, type, ...(m?.caption ? { caption: String(m.caption).slice(0, 500) } : {}) };
   });
 
   return {

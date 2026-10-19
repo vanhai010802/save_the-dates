@@ -731,6 +731,7 @@
       <button class="drawer-tab" data-tab="list" role="tab">Danh sách</button>
     </div>
     <div class="drawer-body" id="drawer-body"></div>
+    <div style="padding:12px 20px;border-top:1px solid #ffe1e8"><button class="btn btn-primary" id="drawer-test-cake" style="width:100%">🎂 Test bánh kem</button></div>
     <div class="drawer-foot">
       <button class="btn btn-ghost" id="drawer-logout">Đăng xuất</button>
       <button class="btn btn-danger" id="drawer-relock">Khóa lại trang</button>
@@ -740,6 +741,8 @@
   <div id="toast" class="toast" hidden></div>
 
   <script type="module">
+    import { startTogetherPresence, createTogetherCake } from '/assets/together-presence.js';
+    import { withMontageAssets } from '/assets/montage-data.js';
     // ============== STATE ==============
     const state = { config: {}, milestones: [], unlocked: false, unlocked_at: null };
 
@@ -817,7 +820,7 @@
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `GET /api/data ${res.status}`);
       }
-      const json = await res.json();
+      const json = await withMontageAssets(await res.json());
       state.config = json.config || {};
       state.milestones = Array.isArray(json.milestones) ? json.milestones : [];
       state.unlocked = !!json.unlocked;
@@ -943,7 +946,7 @@
       const empty = document.getElementById('timeline-empty');
       container.innerHTML = '';
       const sorted = [...state.milestones].sort((a, b) =>
-        (a.date || '').localeCompare(b.date || ''));
+        (b.date || '').localeCompare(a.date || ''));
       if (sorted.length === 0) { empty.hidden = false; return; }
       empty.hidden = true;
 
@@ -1097,6 +1100,12 @@
       document.body.style.overflow = '';
     }
     drawerClose.addEventListener('click', closeDrawer);
+    let testCelebration;
+    document.getElementById('drawer-test-cake').addEventListener('click',()=>{
+      closeDrawer();
+      testCelebration ??= createTogetherCake(()=>state,{test:true,audioElement:document.getElementById('bg-music')});
+      testCelebration.open();
+    });
     drawerBackdrop.addEventListener('click', closeDrawer);
     drawerLogout.addEventListener('click', () => { clearPass(); closeDrawer(); });
     drawerTabs.forEach(b => b.addEventListener('click', () => activateTab(b.dataset.tab)));
@@ -1222,7 +1231,7 @@
       const isEdit = !!milestone;
       editingMilestoneId = isEdit ? String(milestone.id) : null;
       currentMedia = isEdit && Array.isArray(milestone.media)
-        ? milestone.media.map(m => ({ url: m.url, type: m.type === 'video' ? 'video' : 'image' }))
+        ? milestone.media.map(m => ({ url: m.url, type: m.type === 'video' ? 'video' : 'image', ...(m.caption ? { caption: m.caption } : {}) }))
         : [];
       drawerBody.innerHTML = `
         ${isEdit ? '<button class="btn btn-ghost" id="ad-back" style="margin-bottom:12px;">← Quay lại danh sách</button>' : ''}
@@ -1383,7 +1392,7 @@
         return;
       }
       drawerBody.innerHTML = '';
-      const sorted = [...state.milestones].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      const sorted = [...state.milestones].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       for (const ms of sorted) {
         const row = document.createElement('div');
         row.className = 'ms-row';
@@ -1717,6 +1726,7 @@
         });
       }
       showFirstRunBannerIfNeeded();
+      startTogetherPresence(() => state);
     }
     async function init() {
       try {
