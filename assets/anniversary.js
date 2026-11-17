@@ -1,9 +1,8 @@
 import { createMemoryFilm } from './memory-film.js';
 import { withMontageAssets } from './montage-data.js';
-import { startTogetherPresence } from './together-presence.js';
+import { startAnniversaryCake } from './together-presence.js';
 import { warmFilmMedia } from './film-media.js';
 import { setOptimizedImageSource } from './image-delivery.js';
-import { filmPlaybackMessage } from './film-playback.js';
 const $ = id => document.getElementById(id);
 const state = { config: {}, milestones: [] };
 let selectedMonth = 'all', currentMemory, currentPhoto = 0, toastTimer;
@@ -111,7 +110,7 @@ async function load() {
     [['all','Tất cả kỷ niệm'],...months.map(m=>[m,`Tháng ${Number(m.slice(5))}${new Set(months.map(x=>x.slice(0,4))).size > 1 ? `/${m.slice(0,4)}` : ''}`])].forEach(([value,label])=>{
       const button = element('button', value === selectedMonth ? 'selected' : '', label); button.dataset.month = value; button.setAttribute('aria-pressed',String(value===selectedMonth));
       button.addEventListener('click',()=>{selectedMonth=value;filters.querySelectorAll('button').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});renderMemories();}); filters.append(button);
-    }); renderMemories(); dataReady = true;warmFilmMedia(state);startTogetherPresence(()=>state);
+    }); renderMemories(); dataReady = true;warmFilmMedia(state);startAnniversaryCake(()=>state);
   } catch {
     $('data-status').replaceChildren(document.createTextNode('Chưa mở được chiếc hộp kỷ niệm. '));
     const retry = element('button','','Thử lại'); retry.addEventListener('click',load); $('data-status').append(retry);
@@ -124,7 +123,7 @@ async function toggleMusic() {
 }
 function revealMemories() {
   if (!dataReady) { toast('Chờ chiếc hộp kỷ niệm tải xong rồi mình bắt đầu nhé.'); return; }
-  if(!film.open()){toast(filmPlaybackMessage());return;}
+  film.open();
   document.querySelector('.cake-scene').classList.add('candles-out');
 }
 if ($('cake-button')) {

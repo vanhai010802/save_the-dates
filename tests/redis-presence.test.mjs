@@ -44,44 +44,16 @@ test('compare-and-set retries contention without losing another visitor',async()
   const result=await updateRedisState('state',value=>({state:{...value,me:true},result:'saved'}),command);
   assert.equal(result,'saved');assert.deepEqual(JSON.parse(raw),{other:true,me:true});
 });
-test('production presence uses only Redis and pauses safely without configuration',async()=>{
-  const savedFetch=globalThis.fetch,oldNow=Date.now;
-  const envKeys=['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN','KV_REST_API_URL','KV_REST_API_TOKEN','ADMIN_PASSWORD'];
-  const savedEnv=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]));
-  const store=new Map();let clock=now,requests=0;
-  const request=async(body,password)=>{
-    const response={statusCode:200,setHeader(){return this;},status(code){this.statusCode=code;return this;},end(raw){this.body=JSON.parse(raw);}};
-    await handler({method:'POST',body,headers:{'x-admin-password':password}},response);return response;
-  };
+test('retired presence makes no storage calls, including cached reset requests',async()=>{
+  const savedFetch=globalThis.fetch;
+  globalThis.fetch=async()=>{throw Error('Retired presence must never access storage');};
   try{
-    for(const key of envKeys)delete process.env[key];
-    assert.equal((await request(a)).body.code,'PRESENCE_NOT_CONFIGURED');
-    process.env.UPSTASH_REDIS_REST_URL='https://redis.test';process.env.UPSTASH_REDIS_REST_TOKEN='test-only-token';process.env.ADMIN_PASSWORD='test-password';
-    Date.now=()=>clock;
-    globalThis.fetch=async(url,options)=>{
-      assert.equal(new URL(url).hostname,'redis.test','no Blob API calls are allowed');requests++;
-      assert.equal(options.headers.authorization,'Bearer test-only-token');
-      const args=JSON.parse(options.body);let result;
-      if(args[0]==='GET')result=store.get(args[1])??null;
-      else if(args[0]==='EVAL'){
-        const current=store.get(args[3])??'';
-        result=current===args[4]?1:0;if(result)store.set(args[3],args[5]);
-      }else throw Error('Unexpected command');
-      return new Response(JSON.stringify({result}),{status:200});
-    };
-    assert.equal((await request({action:'reset'},'wrong')).statusCode,401);
-    const reset=await request({action:'reset'},'test-password');assert.equal(reset.statusCode,200);
-    await request(a);await request(b);
-    for(let i=1;i<=5;i++){clock=now+i*1000;await request({...a,sequence:i+1});const response=await request({...b,sequence:i+1});assert.equal(response.body.together,i===5);}
-    assert.equal((await request({...a,sequence:7,action:'complete',resetCycle:reset.body.cycle})).body.locked,true);
-    assert.equal((await request({...b,sequence:7})).body.together,false);
-    assert.ok(requests>0);assert.ok(store.has(redisKey('presence:v1')));
-    // A fresh handler invocation still observes the persisted lock.
-    assert.equal((await request({...a,visitorId:randomUUID(),sequence:1})).body.locked,true);
-    globalThis.fetch=async()=>new Response(JSON.stringify({error:'denied'}),{status:401});
-    await assert.rejects(redisCommand(['GET','x']),/Redis storage request failed/);
-  }finally{
-    Date.now=oldNow;globalThis.fetch=savedFetch;
-    for(const [key,value] of Object.entries(savedEnv)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
-  }
+    for(const body of [a,b,{action:'reset'}]){
+      const response={setHeader(){return this;},status(code){this.statusCode=code;return this;},end(raw){this.body=JSON.parse(raw);}};
+      await handler({method:'POST',body,headers:{}},response);
+      assert.equal(response.statusCode,410);
+      assert.equal(response.body.retired,true);
+      assert.equal(response.body.code,'PRESENCE_NOT_CONFIGURED');
+    }
+  }finally{globalThis.fetch=savedFetch;}
 });

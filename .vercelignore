@@ -1,0 +1,8 @@
+.git/
+.vercel/
+.preview/
+.env*
+sao_luu/
+node_modules/
+tests/
+docs/

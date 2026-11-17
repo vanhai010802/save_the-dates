@@ -8,6 +8,9 @@ import { redisConfigured, redisCommand, redisKey } from './_redis.js';
 // → URL mới mỗi lần → đọc luôn fresh. Sau khi ghi xong sẽ xóa các bản cũ.
 const DATA_PREFIX = 'data-';
 const DATA_SUFFIX = '.json';
+// The current original JSON URL is known from the owner's store. Read it
+// directly; listing on every page load would spend Advanced Operations.
+let storyBlobURL = process.env.STORY_BLOB_URL || 'https://hyx28w95uynwxibt.public.blob.vercel-storage.com/data-v-B3rCs7sJxUbv1CzTaUodj6qGrjfgPC.json';
 
 export class HttpError extends Error {
   constructor(status, message, code) {
@@ -49,10 +52,13 @@ export async function readData() {
       const stored = await redisCommand(['GET', redisKey('story:v1')]);
       if (stored !== null) return JSON.parse(stored);
     }
-    const blobs = await listDataBlobs();
-    if (blobs.length === 0) return { config: {}, milestones: [], unlocked: false, unlocked_at: null };
-    const newest = blobs[0];
-    const res = await fetch(newest.url, { cache: 'no-store' });
+    let res = await fetch(storyBlobURL, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if(res.status===404){
+      const blobs=await listDataBlobs();
+      if(!blobs.length)throw new HttpError(503,'Không tìm thấy dữ liệu gốc. Chưa tạo dữ liệu thay thế.','STORY_NOT_FOUND');
+      storyBlobURL=blobs[0].url;
+      res=await fetch(storyBlobURL,{cache:'no-store',signal:AbortSignal.timeout(8000)});
+    }
     if (res.status === 403) throw new HttpError(503, 'Kho dữ liệu đang bị Vercel chặn do vượt hạn mức. Cần mở lại quyền truy cập kho để khôi phục dữ liệu.', 'BLOB_STORE_BLOCKED');
     if (!res.ok) throw new HttpError(502, `Không đọc được data: ${res.status}`);
     const json = await res.json();
@@ -84,12 +90,13 @@ export async function writeData(data) {
   }
   // Lấy danh sách bản cũ trước, viết bản mới, rồi xóa bản cũ.
   const oldBlobs = await listDataBlobs();
-  await put(DATA_PREFIX + 'v' + DATA_SUFFIX, JSON.stringify(data, null, 2), {
+  const written = await put(DATA_PREFIX + 'v' + DATA_SUFFIX, JSON.stringify(data, null, 2), {
     access: 'public',
     contentType: 'application/json',
     addRandomSuffix: true,
     cacheControlMaxAge: 0,
   });
+  storyBlobURL=written.url;
   if (oldBlobs.length > 0) {
     try { await del(oldBlobs.map(b => b.url)); }
     catch (e) { console.error('Cleanup old data blobs failed:', e); }

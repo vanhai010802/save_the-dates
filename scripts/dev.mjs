@@ -1,15 +1,36 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { transitionPresence } from '../api/_presence-state.js';
-import { validVisitor } from '../api/_presence.js';
 const root = resolve(fileURLToPath(new URL('../',import.meta.url)));
 const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.mp3':'audio/mpeg','.mp4':'video/mp4','.jpg':'image/jpeg','.png':'image/png','.json':'application/json; charset=utf-8'};
 let snapshot;
+async function loadStorySnapshot() {
+  try {
+    const response=await fetch('https://savethedates.vercel.app/api/data',{signal:AbortSignal.timeout(8000)});
+    if(!response.ok)throw Error(`upstream ${response.status}`);
+    const data=await response.json();
+    if(!data.config || !Array.isArray(data.milestones))throw Error('Invalid story response');
+    await mkdir(resolve(root,'.preview'),{recursive:true});
+    const backup=resolve(root,'.preview/story-cache.json');
+    await writeFile(backup+'.tmp',JSON.stringify(data,null,2),'utf8');
+    await rename(backup+'.tmp',backup);
+    return data;
+  } catch(error) {
+    for(const filename of ['.preview/story-cache.json','.preview/recovery/recovered-full.json','.preview/recovery/recovered-partial.json']){
+      try{
+        const data=JSON.parse(await readFile(resolve(root,filename),'utf8'));
+        if(!data.config || !Object.keys(data.config).length || !Array.isArray(data.milestones) || !data.milestones.length)continue;
+        console.log(`Using local recovery: ${filename} (${data.milestones.length} milestones)`);
+        return {...data,unlocked:true,recovery:{...data.recovery,local:true,partial:!!data.recovery?.partial,source:filename}};
+      }catch{}
+    }
+    throw error;
+  }
+}
+let cakeClaimed=false;
 const uploads=new Map();
-let presenceState=null;
 createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   res.setHeader('Cache-Control','no-store');
@@ -17,19 +38,21 @@ createServer(async(req,res)=>{
   if(url.pathname.startsWith('/__preview/media/')){const item=uploads.get(url.pathname);if(!item){res.writeHead(404);res.end();return;}res.setHeader('Content-Type',item.type);res.end(item.body);return;}
   if(url.pathname.startsWith('/api/')){
     res.setHeader('Content-Type','application/json; charset=utf-8');
-    if(url.pathname==='/api/presence' && req.method==='POST'){
+    if(url.pathname==='/api/cake' && req.method==='POST'){
       try{
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
         if(body.action==='reset'){
-          if(req.headers['x-admin-password']!=='demo'){res.writeHead(401);res.end('{"error":"Sai mật khẩu"}');return;}
-        }else if(!validVisitor(body.visitorId) || !validVisitor(body.userId) || typeof body.active!=='boolean' || !Number.isSafeInteger(body.sequence) || body.sequence<1)throw Error('invalid');
-        const now=Date.now(),next=transitionPresence(presenceState,body,now,`${now}_${randomUUID()}`);
-        presenceState=next.state;res.end(JSON.stringify(next.result));
-      }catch{res.writeHead(400);res.end('{"error":"Thiết bị không hợp lệ"}');}return;
+          if(req.headers['x-cake-password']!=='6thang'){res.writeHead(401);res.end(JSON.stringify({error:'Sai mật khẩu reset.'}));return;}
+          cakeClaimed=false;res.end(JSON.stringify({ok:true}));return;
+        }
+        if(body.action!=='claim')throw Error('Invalid action');
+        const show=!cakeClaimed;cakeClaimed=true;res.end(JSON.stringify({show}));
+      }catch{res.writeHead(400);res.end(JSON.stringify({error:'Invalid request'}));}return;
     }
+    if(url.pathname==='/api/presence'){res.writeHead(410);res.end(JSON.stringify({code:'PRESENCE_NOT_CONFIGURED',retired:true}));return;}
     // Local preview reads the public existing data. It never writes to production.
     if(url.pathname==='/api/data' && req.method==='GET'){
-      try{if(!snapshot){const response=await fetch('https://savethedates.vercel.app/api/data');if(!response.ok)throw Error('upstream');snapshot=await response.json();}res.end(JSON.stringify({...snapshot,preview:true}));}catch{res.writeHead(502);res.end(JSON.stringify({error:'Không tải được dữ liệu website hiện tại.'}));}return;
+      try{if(!snapshot)snapshot=await loadStorySnapshot();res.end(JSON.stringify({...snapshot,preview:true}));}catch{res.writeHead(502);res.end(JSON.stringify({error:'Không tải được dữ liệu website hiện tại và chưa có bản sao lưu trên máy.'}));}return;
     }
     if(req.headers['x-admin-password']!=='demo'){res.writeHead(401);res.end(JSON.stringify({error:'Bản xem thử: dùng mật khẩu demo. Các thay đổi chỉ lưu tạm trên máy.'}));return;}
     if(url.pathname==='/api/auth' && req.method==='POST'){res.end('{"ok":true}');return;}

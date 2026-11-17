@@ -731,7 +731,7 @@
       <button class="drawer-tab" data-tab="list" role="tab">Danh sách</button>
     </div>
     <div class="drawer-body" id="drawer-body"></div>
-    <div style="padding:12px 20px;border-top:1px solid #ffe1e8"><button class="btn btn-primary" id="drawer-test-cake" style="width:100%">🎂 Test bánh kem</button></div>
+    <div style="padding:12px 20px;border-top:1px solid #ffe1e8"><button class="btn btn-primary" id="drawer-test-cake" style="width:100%">🎂 Xem lại bánh kem</button></div>
     <div style="padding:0 20px 12px"><button class="btn btn-ghost" id="drawer-reset-bk" style="width:100%">↻ Reset BK</button></div>
     <div class="drawer-foot">
       <button class="btn btn-ghost" id="drawer-logout">Đăng xuất</button>
@@ -742,7 +742,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <script type="module">
-    import { startTogetherPresence, createTogetherCake } from '/assets/together-presence.js';
+    import { startAnniversaryCake, createTogetherCake } from '/assets/together-presence.js';
     import { withMontageAssets } from '/assets/montage-data.js';
     import { warmFilmMedia } from '/assets/film-media.js';
     import { setOptimizedImageSource } from '/assets/image-delivery.js';
@@ -1110,14 +1110,9 @@
       testCelebration ??= createTogetherCake(()=>state,{test:true,audioElement:document.getElementById('bg-music')});
       testCelebration.open();
     });
-    document.getElementById('drawer-reset-bk').addEventListener('click',async event=>{
-      const button=event.currentTarget;button.disabled=true;
-      try{
-        const response=await fetch('/api/presence',{method:'POST',headers:{'content-type':'application/json','x-admin-password':getPass()},body:JSON.stringify({action:'reset'})});
-        if(!response.ok){const error=await response.json();throw Error(error.error || 'Không reset được bánh kem');}
-        showToast('Đã Reset BK — hai người cùng mở tab đủ 5 giây sẽ hiện bánh kem lại');
-        window.dispatchEvent(new Event('bk-reset'));
-      }catch(error){showToast(error.message,true);}finally{button.disabled=false;}
+    document.getElementById('drawer-reset-bk').addEventListener('click',()=>{
+      closeDrawer();
+      window.dispatchEvent(new Event('bk-reset'));
     });
     drawerBackdrop.addEventListener('click', closeDrawer);
     drawerLogout.addEventListener('click', () => { clearPass(); closeDrawer(); });
@@ -1743,7 +1738,7 @@
     async function init() {
       try {
         await loadData();
-        startTogetherPresence(() => state);
+        startAnniversaryCake(() => state);
         document.getElementById('loader').hidden = true;
         if (!state.unlocked) {
           showLockScreen();
