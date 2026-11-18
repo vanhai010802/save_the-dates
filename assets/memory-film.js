@@ -9,7 +9,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     <header class="film-header"><span>♡ &nbsp; OUR LITTLE LOVE STORY</span><button type="button" class="film-close" aria-label="Đóng thước phim">×</button></header>
     <div class="film-stage"></div>
     <div class="film-announcement" role="status" aria-live="polite"></div>
-    <footer class="film-controls"><div class="film-control-row"><div><button type="button" class="film-previous" aria-label="Cảnh trước">←</button><button type="button" class="film-play" aria-label="Tạm dừng thước phim">Ⅱ</button><button type="button" class="film-next" aria-label="Cảnh tiếp theo">→</button><span class="film-time"></span></div><div><button type="button" class="film-speed" aria-label="Tốc độ phát: 1×. Bấm để đổi sang 1.5×" title="Đổi tốc độ phát">1×</button><button type="button" class="film-sound" aria-label="Tắt nhạc thước phim" aria-pressed="true">♫ <span>Nhạc bật</span></button><span class="film-scene-count"></span></div></div><input class="film-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Tiến trình thước phim"><div class="film-bottom-note"><span>MỖI KHOẢNH KHẮC, MỘT CHÚT YÊU THƯƠNG</span><span>Space: phát / dừng · ← →: chuyển cảnh</span></div></footer>`;
+    <footer class="film-controls"><div class="film-control-row"><div><button type="button" class="film-previous" aria-label="Cảnh trước">←</button><button type="button" class="film-play" aria-label="Tạm dừng thước phim">Ⅱ</button><button type="button" class="film-next" aria-label="Cảnh tiếp theo">→</button><span class="film-time"></span></div><div><button type="button" class="film-speed" aria-label="Tốc độ ảnh và chữ: 1×. Bấm để đổi sang 1.5×" title="Đổi tốc độ ảnh và chữ; video luôn phát 1×">1×</button><button type="button" class="film-sound" aria-label="Tắt nhạc thước phim" aria-pressed="true">♫ <span>Nhạc bật</span></button><span class="film-scene-count"></span></div></div><input class="film-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Tiến trình thước phim"><div class="film-bottom-note"><span>MỖI KHOẢNH KHẮC, MỘT CHÚT YÊU THƯƠNG</span><span>Space: phát / dừng · ← →: chuyển cảnh</span></div></footer>`;
   document.body.append(dialog);
   const $ = selector => dialog.querySelector(selector);
   const stage = $('.film-stage'), audio = audioElement;
@@ -18,6 +18,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0, revealTimer;
   const speeds = [1, 1.5, 2];
   let speed = 1;
+  let videoLoadFailed = false;
   const make = (tag, className, text) => { const el=document.createElement(tag);el.className=className;if(text!==undefined)el.textContent=String(text).normalize('NFC');return el; };
   const clock = ms => `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   function buildScenes() {
@@ -41,7 +42,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   }
   function showScene(next,progress=0){
     token++;const currentToken=token;clearTimeout(revealTimer);
-    index=Math.max(0,Math.min(scenes.length-1,next));elapsed=progress;ended=false;
+    index=Math.max(0,Math.min(scenes.length-1,next));elapsed=progress;ended=false;videoLoadFailed=false;
     const scene=scenes[index], card=make('section',`film-scene film-${scene.type} film-variant-${(scene.chapter ?? index)%3}`);
     if(scene.chapter!==undefined)card.dataset.chapter=String(scene.chapter);
     let mounted=false;
@@ -59,7 +60,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         // underneath a transparent incoming frame, even during rapid seeking.
         stage.replaceChildren(card);
         const video=card.querySelector('video');
-        if(video){video.playbackRate=speed;video.currentTime=Math.min(elapsed/1000,Math.max(0,video.duration-.1));if(playing)video.play().catch(()=>{});}
+        if(video){video.playbackRate=1;video.currentTime=Math.min(elapsed/1000,Math.max(0,video.duration-.1));if(playing)video.play().catch(()=>{});}
       };
       const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if(old && playing && !reducedMotion)revealTimer=setTimeout(reveal,FILM_FADE_MS);
@@ -74,7 +75,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         if(!media || currentToken!==token || !dialog.open)return;
         media.hidden=false;
         if(media.tagName==='VIDEO'){
-          media.playbackRate=speed;
+          media.playbackRate=1;
           if(Number.isFinite(media.duration) && media.duration>0){
             // Uploaded clips may not include duration metadata in story JSON.
             scene.duration=Math.max(1000,media.duration*1000);
@@ -94,7 +95,10 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
       };
       const url=safeURL(scene.media.url), cached=getFilmMedia(url);
       if(cached)attach(cached);
-      else void loadFilmMedia(url,scene.media.type).then(ok=>{if(ok)attach(getFilmMedia(url));});
+      else void loadFilmMedia(url,scene.media.type).then(ok=>{
+        if(ok)attach(getFilmMedia(url));
+        else if(currentToken===token && scene.media.type==='video')videoLoadFailed=true;
+      });
     }else{
       const ornament=make('div','film-ornament');ornament.setAttribute('aria-hidden','true');
       ornament.innerHTML='<svg viewBox="0 0 160 100"><path class="film-heart-path" d="M10 60h33l9-14 11 30 11-53 12 37h15c-25-18-14-42 2-28 17-15 32 8 2 28h44"/></svg>';
@@ -120,11 +124,22 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   function tick(now){
     if(!dialog.open)return;
     if(playing){
-      const position=Math.min(total,offsets[index]+elapsed+Math.max(0,now-lastTime)*speed);
-      const next=offsets.findLastIndex(start=>start<=position);
-      if(next!==index)showScene(next,position-offsets[next]);else elapsed=position-offsets[index];
-      if(position>=total){
-        elapsed=total-offsets[index];ended=true;setPlaying(false);
+      const isVideo=scenes[index].media?.type==='video';
+      if(isVideo && !videoLoadFailed){
+        // Follow the clip's actual clock, including loading and buffering.
+        // The photo speed must never skip or shorten an attached video.
+        const video=stage.querySelector('.film-scene:not(.film-leaving) video');
+        if(video){
+          elapsed=Math.min(scenes[index].duration,video.currentTime*1000);
+          if(video.ended)showScene(index+1);
+        }
+      }else{
+        const position=Math.min(total,offsets[index]+elapsed+Math.max(0,now-lastTime)*(isVideo?1:speed));
+        const next=offsets.findLastIndex(start=>start<=position);
+        if(next!==index)showScene(next,scenes[next].media?.type==='video'?0:position-offsets[next]);else elapsed=position-offsets[index];
+        if(position>=total){
+          elapsed=total-offsets[index];ended=true;setPlaying(false);
+        }
       }
       updateProgress();
     }
@@ -138,8 +153,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   $('.film-speed').addEventListener('click',()=>{
     speed=speeds[(speeds.indexOf(speed)+1)%speeds.length];
     $('.film-speed').textContent=`${speed}×`;
-    $('.film-speed').setAttribute('aria-label',`Tốc độ phát: ${speed}×. Bấm để đổi sang ${speeds[(speeds.indexOf(speed)+1)%speeds.length]}×`);
-    stage.querySelectorAll('video').forEach(video=>{video.playbackRate=speed;});
+    $('.film-speed').setAttribute('aria-label',`Tốc độ ảnh và chữ: ${speed}×. Bấm để đổi sang ${speeds[(speeds.indexOf(speed)+1)%speeds.length]}×`);
     lastTime=performance.now();
   });
   $('.film-seek').addEventListener('input',e=>{const target=Number(e.target.value)/1000*total;const next=offsets.findLastIndex(start=>start<=target);showScene(next,Math.min(target-offsets[next],scenes[next].duration));});
