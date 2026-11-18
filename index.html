@@ -398,6 +398,13 @@
       transition: border-color 0.2s;
     }
     .modal-card input:focus, .modal-card textarea:focus { border-color: var(--coral); }
+    .password-field { position: relative; }
+    .modal-card .password-field input, .password-preview { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 16px; line-height: 1.5; letter-spacing: .12em; }
+    .password-field input { caret-color: var(--ink); }
+    .password-field input.password-peek-ready { color: transparent; -webkit-text-fill-color: transparent; }
+    .password-preview { position: absolute; inset: 0; padding: 10px 14px; border: 2px solid transparent; border-radius: 10px; overflow: hidden; pointer-events: none; color: var(--ink); white-space: pre; }
+    .password-preview[hidden] { display: none; }
+    .password-preview > span { display: block; }
     .modal-actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
     .btn {
       padding: 10px 18px; border: none; border-radius: 10px; font-family: inherit;
@@ -752,7 +759,10 @@
     <div class="modal-card">
       <h3>Nhập mật khẩu admin</h3>
       <form id="auth-form">
-        <input type="text" id="auth-pass" aria-label="Mật khẩu admin" autocomplete="current-password" autocapitalize="none" spellcheck="false" autofocus>
+        <div class="password-field">
+          <input type="password" id="auth-pass" aria-label="Mật khẩu admin" autocomplete="current-password" autocapitalize="none" spellcheck="false" autofocus>
+          <span class="password-preview" id="auth-pass-preview" aria-hidden="true" hidden><span></span></span>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="auth-cancel">Đóng</button>
           <button type="submit" class="btn btn-primary" id="auth-submit">Mở khóa</button>
@@ -784,6 +794,7 @@
 
   <script type="module">
     import { createMemoryFilm } from '/assets/memory-film.js';
+    import { passwordPeek } from '/assets/password-peek.js';
     import { withMontageAssets } from '/assets/montage-data.js';
     import { warmFilmMedia } from '/assets/film-media.js';
     import { setOptimizedImageSource } from '/assets/image-delivery.js';
@@ -1106,6 +1117,7 @@
     const authModal = document.getElementById('auth-modal');
     const authForm = document.getElementById('auth-form');
     const authPass = document.getElementById('auth-pass');
+    const maskAuthPass = passwordPeek(authPass, document.getElementById('auth-pass-preview'));
     const authCancel = document.getElementById('auth-cancel');
     const authSubmit = document.getElementById('auth-submit');
     const drawer = document.getElementById('drawer');
@@ -1118,6 +1130,7 @@
     adminFab.addEventListener('click', () => {
       if (getPass()) { openDrawer(); return; }
       authPass.value = '';
+      maskAuthPass();
       authModal.hidden = false;
       setTimeout(() => authPass.focus(), 0);
     });

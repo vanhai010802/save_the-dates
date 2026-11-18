@@ -25,6 +25,12 @@
 @media(max-width:640px){.film-montage .film-photo-frame{width:100%;height:95%;max-height:none;flex-basis:auto}}
 
 .film-loading{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;color:var(--film-cream);font-size:14px}
+.film-video-prompt{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center;background:#211e1b90;font:13px/1.8 'Quicksand',sans-serif;pointer-events:none}
+.film-video-prompt[hidden],.film-video-prompt [hidden]{display:none!important}
+.memory-film .film-video-start{pointer-events:auto;border:1px solid #e2bc9980;border-radius:24px;padding:12px 18px;font:600 13px 'Quicksand',sans-serif;background:#47362b;cursor:pointer}
+.film-video-link{pointer-events:auto;color:#e2bc99;text-decoration:underline;font-size:12px}
+.film-video .film-media{opacity:1;background:#171411}
+.memory-film .film-scene.film-video .film-photo-frame{animation:none!important;transform:none;translate:none;scale:none}
 
 .film-awaiting .film-photo-wash{display:none}.film-photo.film-awaiting .film-photo-frame{visibility:hidden}.film-montage.film-awaiting{flex-direction:column;text-align:center}.film-montage.film-awaiting .film-photo-frame{display:none}
 

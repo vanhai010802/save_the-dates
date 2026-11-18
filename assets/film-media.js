@@ -17,27 +17,25 @@ export function filmMediaURL(value) {
 export const getFilmMedia = url => entries.get(url)?.media;
 
 async function download(entry) {
-  const optimized = entry.type === 'video' ? entry.url : optimizedImageURL(entry.url);
+  const optimized = optimizedImageURL(entry.url);
   const sources = [optimized, entry.url];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const media = document.createElement(entry.type === 'video' ? 'video' : 'img');
+    const media = document.createElement('img');
     media.className = 'film-media';
     media.fetchPriority = entry.priority;
     entry.loading = media;
-    if (entry.type === 'video') { media.muted = true; media.playsInline = true; media.preload = 'auto'; }
-    else media.decoding = 'async';
+    media.decoding = 'async';
     const ok = await new Promise(resolve => {
       let settled = false;
       const finish = value => {
         if (settled) return;
         settled = true; clearTimeout(timeout);
-        media.onload = media.onerror = media.onloadeddata = null;
+        media.onload = media.onerror = null;
         if (!value) media.removeAttribute('src');
         resolve(value);
       };
       const timeout = setTimeout(() => finish(false), 10000);
-      if (entry.type === 'video') media.onloadeddata = () => finish(true);
-      else media.onload = () => media.decode().catch(() => {}).then(() => finish(media.naturalWidth > 0));
+      media.onload = () => media.decode().catch(() => {}).then(() => finish(media.naturalWidth > 0));
       media.onerror = () => finish(false);
       media.src = sources[attempt];
     });
@@ -63,6 +61,9 @@ function pump() {
 }
 
 export function loadFilmMedia(url, type = 'image', priority = 'high') {
+  // iPhone may preload metadata only. Video must be mounted and played by its
+  // scene, rather than waiting for loadeddata on a detached element here.
+  if (type === 'video') return Promise.resolve(false);
   url = filmMediaURL(url);
   if (!url) return Promise.resolve(false);
   let entry = entries.get(url);

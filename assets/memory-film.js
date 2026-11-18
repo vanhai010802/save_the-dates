@@ -1,5 +1,6 @@
 import { buildFilmScenes, filmTimeline, FILM_FADE_MS } from './film-timeline.js';
 import { filmMediaURL as safeURL, getFilmMedia, loadFilmMedia } from './film-media.js';
+import { createFilmVideo } from './film-video.js';
 // A timed film made directly from the existing milestones and photo captions.
 export function createMemoryFilm(getData, audioElement = document.getElementById('background-music')) {
   const dialog = document.createElement('dialog');
@@ -18,7 +19,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0, revealTimer;
   const speeds = [1, 1.5, 2];
   let speed = 1;
-  let videoLoadFailed = false;
+  let currentVideo;
   const make = (tag, className, text) => { const el=document.createElement(tag);el.className=className;if(text!==undefined)el.textContent=String(text).normalize('NFC');return el; };
   const clock = ms => `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   function buildScenes() {
@@ -29,7 +30,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   function updateSound(){ $('.film-sound').setAttribute('aria-pressed',String(sound));$('.film-sound').setAttribute('aria-label',sound?'Tắt nhạc thước phim':'Bật nhạc thước phim');$('.film-sound span').textContent=sound?'Nhạc bật':'Nhạc tắt'; }
   function setPlaying(value) {
     playing=value;dialog.classList.toggle('film-paused',!playing);$('.film-play').textContent=ended?'↻':playing?'Ⅱ':'▷';$('.film-play').setAttribute('aria-label',ended?'Xem lại thước phim':playing?'Tạm dừng thước phim':'Phát thước phim');
-    stage.querySelectorAll('.film-scene:not(.film-leaving) video').forEach(video=>playing ? video.play().catch(()=>{}) : video.pause());
+    if (playing) currentVideo?.play(); else currentVideo?.pause();
     if(playing)playAudio();else audio.pause();lastTime=performance.now();
   }
   function updateProgress(){
@@ -41,8 +42,9 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     $('.film-previous').disabled=index===0;$('.film-next').disabled=index===scenes.length-1;
   }
   function showScene(next,progress=0){
+    currentVideo?.dispose();currentVideo=null;
     token++;const currentToken=token;clearTimeout(revealTimer);
-    index=Math.max(0,Math.min(scenes.length-1,next));elapsed=progress;ended=false;videoLoadFailed=false;
+    index=Math.max(0,Math.min(scenes.length-1,next));elapsed=progress;ended=false;
     const scene=scenes[index], card=make('section',`film-scene film-${scene.type} film-variant-${(scene.chapter ?? index)%3}`);
     if(scene.chapter!==undefined)card.dataset.chapter=String(scene.chapter);
     let mounted=false;
@@ -58,9 +60,9 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         if(currentToken!==token || !dialog.open)return;
         // Replace only after the outgoing fade. There is never a second image
         // underneath a transparent incoming frame, even during rapid seeking.
+        stage.querySelectorAll('video').forEach(video=>{video.removeAttribute('src');video.load();});
         stage.replaceChildren(card);
-        const video=card.querySelector('video');
-        if(video){video.playbackRate=1;video.currentTime=Math.min(elapsed/1000,Math.max(0,video.duration-.1));if(playing)video.play().catch(()=>{});}
+        currentVideo?.mount(elapsed/1000);
       };
       const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if(old && playing && !reducedMotion)revealTimer=setTimeout(reveal,FILM_FADE_MS);
@@ -74,17 +76,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
       const attach=media=>{
         if(!media || currentToken!==token || !dialog.open)return;
         media.hidden=false;
-        if(media.tagName==='VIDEO'){
-          media.playbackRate=1;
-          if(Number.isFinite(media.duration) && media.duration>0){
-            // Uploaded clips may not include duration metadata in story JSON.
-            scene.duration=Math.max(1000,media.duration*1000);
-            ({offsets,total}=filmTimeline(scenes));
-            elapsed=Math.min(elapsed,scene.duration);updateProgress();
-          }
-          media.currentTime=Math.min(elapsed/1000,Math.max(0,media.duration-.1));
-          if(playing && card.isConnected)media.play().catch(()=>{});else media.pause();
-        }else{
+        if(media.tagName!=='VIDEO'){
           media.alt=scene.media.caption || scene.title;
           background.style.backgroundImage=`url(${JSON.stringify(media.currentSrc || media.src)})`;
         }
@@ -93,12 +85,34 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         copy.hidden=scene.type==='montage';
         card.classList.remove('film-awaiting');card.classList.add('film-media-ready');
       };
-      const url=safeURL(scene.media.url), cached=getFilmMedia(url);
-      if(cached)attach(cached);
-      else void loadFilmMedia(url,scene.media.type).then(ok=>{
-        if(ok)attach(getFilmMedia(url));
-        else if(currentToken===token && scene.media.type==='video')videoLoadFailed=true;
-      });
+      const url=safeURL(scene.media.url);
+      if(scene.media.type==='video'){
+        card.classList.add('film-video');
+        const prompt=make('div','film-video-prompt'), message=make('p','','Đang tải video…');
+        prompt.setAttribute('role','status');
+        const retry=make('button','film-video-start','▷ Chạm để phát video');retry.type='button';retry.hidden=true;
+        const separate=make('a','film-video-link','Mở video riêng');separate.href=url;separate.target='_blank';separate.rel='noopener';separate.hidden=true;
+        retry.addEventListener('click',()=>setPlaying(true));
+        prompt.append(message,retry,separate);
+        currentVideo=createFilmVideo(url,{
+          isCurrent:()=>currentToken===token && dialog.open,
+          isPlaying:()=>playing,
+          onDuration:seconds=>{
+            scene.duration=Math.max(1000,seconds*1000);
+            ({offsets,total}=filmTimeline(scenes));elapsed=Math.min(elapsed,scene.duration);updateProgress();
+          },
+          onStatus:(kind,text)=>{
+            prompt.hidden=kind==='ready';message.textContent=text;
+            retry.hidden=separate.hidden=kind==='loading' || kind==='ready';
+            retry.textContent=kind==='retry'?'↻ Thử phát lại video':'▷ Chạm để phát video';
+          },
+        });
+        attach(currentVideo.element);photo.append(prompt);
+      }else{
+        const cached=getFilmMedia(url);
+        if(cached)attach(cached);
+        else void loadFilmMedia(url,scene.media.type).then(ok=>{if(ok)attach(getFilmMedia(url));});
+      }
     }else{
       const ornament=make('div','film-ornament');ornament.setAttribute('aria-hidden','true');
       ornament.innerHTML='<svg viewBox="0 0 160 100"><path class="film-heart-path" d="M10 60h33l9-14 11 30 11-53 12 37h15c-25-18-14-42 2-28 17-15 32 8 2 28h44"/></svg>';
@@ -118,14 +132,14 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     lastTime=performance.now();updateProgress();
   }
   function prefetchUpcoming(){
-    const upcoming=scenes.slice(index+1).filter(scene=>scene.media).slice(0,6);
+    const upcoming=scenes.slice(index+1).filter(scene=>scene.media && scene.media.type!=='video').slice(0,6);
     for(const scene of upcoming)void loadFilmMedia(safeURL(scene.media.url),scene.media.type,'auto');
   }
   function tick(now){
     if(!dialog.open)return;
     if(playing){
       const isVideo=scenes[index].media?.type==='video';
-      if(isVideo && !videoLoadFailed){
+      if(isVideo){
         // Follow the clip's actual clock, including loading and buffering.
         // The photo speed must never skip or shorten an attached video.
         const video=stage.querySelector('.film-scene:not(.film-leaving) video');
@@ -159,7 +173,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   $('.film-seek').addEventListener('input',e=>{const target=Number(e.target.value)/1000*total;const next=offsets.findLastIndex(start=>start<=target);showScene(next,Math.min(target-offsets[next],scenes[next].duration));});
   dialog.addEventListener('keydown',e=>{if($('.film-play').disabled && e.key!=='Escape')return;if(e.target.matches('input,button') && (e.code==='Space' || e.key==='Enter'))return;if(e.code==='Space'){e.preventDefault();toggle();}else if(e.key==='ArrowLeft' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index-1);}else if(e.key==='ArrowRight' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index+1);}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden && dialog.open)setPlaying(false);});
-  dialog.addEventListener('close',()=>{cancelAnimationFrame(frame);clearTimeout(revealTimer);token++;setPlaying(false);stage.replaceChildren();if(audioWasPlaying)audio.play().catch(()=>{});});
+  dialog.addEventListener('close',()=>{cancelAnimationFrame(frame);clearTimeout(revealTimer);token++;setPlaying(false);currentVideo?.dispose();currentVideo=null;stage.querySelectorAll('video').forEach(video=>{video.removeAttribute('src');video.load();});stage.replaceChildren();if(audioWasPlaying)audio.play().catch(()=>{});});
   return {close(){dialog.close();},open(){
     if(dialog.open)return false;
     ended=false;

@@ -51,8 +51,8 @@ test('background warming shares downloads, limits concurrency and prioritizes pl
     assert.equal(requests.length, 5, 'ready images are reused without another download');
     assert.equal(requests.some(item => item.tagName === 'VIDEO'), false);
 
-    const video = loadFilmMedia('/clip.mp4', 'video');
-    await finish('/clip.mp4'); assert.equal(await video, true);
+    assert.equal(await loadFilmMedia('/clip.mp4', 'video'), false);
+    assert.equal(requests.some(item => item.tagName === 'VIDEO'), false, 'videos must mount in the scene before loading, never wait for detached loadeddata');
     const broken = loadFilmMedia('/broken.jpg');
     await finish('/broken.jpg', false); await finish('/broken.jpg', false);
     assert.equal(await broken, false);
