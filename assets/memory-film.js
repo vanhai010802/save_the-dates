@@ -1,6 +1,5 @@
-import { montageItems } from './montage-data.js';
+import { buildFilmScenes, filmTimeline, FILM_FADE_MS } from './film-timeline.js';
 import { filmMediaURL as safeURL, getFilmMedia, loadFilmMedia } from './film-media.js';
-const FILM_DURATION = 180000;
 // A timed film made directly from the existing milestones and photo captions.
 export function createMemoryFilm(getData, audioElement = document.getElementById('background-music')) {
   const dialog = document.createElement('dialog');
@@ -14,37 +13,14 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   document.body.append(dialog);
   const $ = selector => dialog.querySelector(selector);
   const stage = $('.film-stage'), audio = audioElement;
+  stage.style.setProperty('--film-fade-duration',`${FILM_FADE_MS}ms`);
   let scenes = [], index = 0, elapsed = 0, total = 0, offsets = [], playing = false, ended = false;
   let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0, revealTimer;
   const make = (tag, className, text) => { const el=document.createElement(tag);el.className=className;if(text!==undefined)el.textContent=String(text).normalize('NFC');return el; };
-  const formatDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('.') : '';
   const clock = ms => `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   function buildScenes() {
-    const { config = {}, milestones = [] } = getData();
-    const months = Math.max(1,Math.min(1200,Number(config.anniversary_months)||6));
-    scenes = [{type:'intro',duration:3400,kicker:'MỘT CHIẾC BÁNH. MỘT ĐIỀU ƯỚC.',title:`${months} tháng có nhau.`,description:config.anniversary_title || 'Nếu được chọn lại từ đầu, anh vẫn sẽ chọn gặp em.'}];
-    [...milestones].sort((a,b)=>(a.date || '').localeCompare(b.date || '')).forEach((memory,chapter)=>{
-      scenes.push({type:'chapter',duration:2500,kicker:`CHƯƠNG ${String(chapter+1).padStart(2,'0')} · ${formatDate(memory.date)}`,title:memory.title || 'Một ngày có nhau',description:memory.description || 'Có những ngày, chỉ cần ở cạnh nhau là đủ.',emoji:memory.emoji || '♡'});
-      const items=(memory.media || []).filter(m=>safeURL(m.url));
-      const photoDuration=items.filter(media=>media.type!=='video').length>=4 ? 1000 : 2000;
-      items.forEach((media,photo)=>scenes.push({type:'photo',duration:media.type==='video' ? 2000 : photoDuration,media,kicker:formatDate(memory.date),title:memory.title || 'Một ngày có nhau',description:media.caption || memory.description || 'Một khoảnh khắc nhỏ. Một kỷ niệm thật lâu.',photo,chapter}));
-    });
-    scenes.push({type:'outro',duration:6800,kicker:'VÀ CÂU CHUYỆN VẪN ĐANG TIẾP TỤC…',title:'Mình còn cả mai sau.',description:config.anniversary_message || 'Cảm ơn em vì những ngày đã qua.\nMình cứ nắm tay nhau, viết tiếp những tháng năm thật đẹp nhé.',names:`${config.person1_name || 'Hải'} & ${config.person2_name || 'Yên'}`});
-    const finale=scenes.pop();
-    scenes.push({type:'chapter',duration:2500,kicker:'OUR MOMENTS',title:'Những khoảnh khắc của đôi ta',description:''});
-    montageItems(config.anniversary_montage).forEach((media,photo)=>scenes.push({type:'montage',duration:media.type==='video'?media.duration:1500,media,title:`Những khoảnh khắc của đôi ta — ${media.type==='video'?'video':'ảnh'} ${photo+1}`,photo}));
-    scenes.push(finale);
-    fitTimeline();
-  }
-  function fitTimeline() {
-    // Preserve video clip lengths where possible; fit the remaining scenes into
-    // exactly three minutes regardless of the number of memories.
-    const videoTime=scenes.reduce((sum,scene)=>sum+(scene.media?.type==='video'?scene.duration:0),0);
-    const fixed=videoTime<FILM_DURATION-20000?videoTime:0;
-    const flexible=scenes.reduce((sum,scene)=>sum+(fixed && scene.media?.type==='video'?0:scene.duration),0);
-    scenes.forEach(scene=>{if(!(fixed && scene.media?.type==='video'))scene.duration=scene.duration/flexible*(FILM_DURATION-fixed);});
-    scenes.at(-1).duration+=FILM_DURATION-scenes.reduce((sum,scene)=>sum+scene.duration,0);
-    let offset=0;offsets=scenes.map(scene=>{const start=offset;offset+=scene.duration;return start;});total=FILM_DURATION;
+    scenes = buildFilmScenes(getData(), safeURL);
+    ({offsets, total} = filmTimeline(scenes));
   }
   function playAudio() { if(sound && playing)audio.play().catch(()=>{sound=false;updateSound();}); }
   function updateSound(){ $('.film-sound').setAttribute('aria-pressed',String(sound));$('.film-sound').setAttribute('aria-label',sound?'Tắt nhạc thước phim':'Bật nhạc thước phim');$('.film-sound span').textContent=sound?'Nhạc bật':'Nhạc tắt'; }
@@ -69,27 +45,23 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     let mounted=false;
     const mount=()=>{
       if(mounted || currentToken!==token)return;mounted=true;
-      stage.querySelectorAll('.film-leaving').forEach(el=>el.remove());
       const old=stage.lastElementChild;
-      const dissolvePhotos=old?.classList.contains('film-photo') && scene.type==='photo' && old.dataset.chapter===String(scene.chapter);
       if(old){
         old.querySelectorAll('video').forEach(v=>v.pause());
-        if(dissolvePhotos){
-          // Retain only the outgoing image, never an earlier chapter's words.
-          old.querySelectorAll('.film-copy,.film-ornament,.film-wish-sparks').forEach(el=>el.remove());
-          old.classList.add('film-leaving');old.setAttribute('aria-hidden','true');old.inert=true;
-        }else old.remove();
+        old.classList.add('film-leaving');old.setAttribute('aria-hidden','true');old.inert=true;
       }
       if(!playing)card.classList.add('film-static-enter');
       const reveal=()=>{
         if(currentToken!==token || !dialog.open)return;
-        stage.append(card);
+        // Replace only after the outgoing fade. There is never a second image
+        // underneath a transparent incoming frame, even during rapid seeking.
+        stage.replaceChildren(card);
+        const video=card.querySelector('video');
+        if(video){video.currentTime=Math.min(elapsed/1000,Math.max(0,video.duration-.1));if(playing)video.play().catch(()=>{});}
       };
-      // At chapter boundaries, clear the old scene first and leave a short
-      // empty beat before showing the new text. Never overlap the two layouts.
-      if(old && !dissolvePhotos)revealTimer=setTimeout(reveal,120);
+      const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if(old && playing && !reducedMotion)revealTimer=setTimeout(reveal,FILM_FADE_MS);
       else reveal();
-      if(dissolvePhotos)setTimeout(()=>old.remove(),700);
     };
     card.setAttribute('aria-label',scene.title);card.style.setProperty('--scene-duration',`${scene.duration}ms`);if(!playing)card.classList.add('film-static-enter');
     const copy=make('div','film-copy');copy.append(make('span','film-kicker',scene.kicker),make('h2','film-title',scene.title),make('p','film-description',scene.description));
@@ -100,8 +72,14 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         if(!media || currentToken!==token || !dialog.open)return;
         media.hidden=false;
         if(media.tagName==='VIDEO'){
+          if(Number.isFinite(media.duration) && media.duration>0){
+            // Uploaded clips may not include duration metadata in story JSON.
+            scene.duration=Math.max(1000,media.duration*1000);
+            ({offsets,total}=filmTimeline(scenes));
+            elapsed=Math.min(elapsed,scene.duration);updateProgress();
+          }
           media.currentTime=Math.min(elapsed/1000,Math.max(0,media.duration-.1));
-          if(playing)media.play().catch(()=>{});else media.pause();
+          if(playing && card.isConnected)media.play().catch(()=>{});else media.pause();
         }else{
           media.alt=scene.media.caption || scene.title;
           background.style.backgroundImage=`url(${JSON.stringify(media.currentSrc || media.src)})`;

@@ -24,6 +24,8 @@ test('background warming shares downloads, limits concurrency and prioritizes pl
       await new Promise(resolve => setImmediate(resolve));
     };
     warmFilmMedia({ milestones: [
+      { date: '2026-10-19', media: [{ url: '/excluded-cutoff.jpg' }] },
+      { date: '2026-11-01', media: [{ url: '/excluded-later.jpg' }] },
       { date: '2026-02-01', media: [{ url: '/3.jpg' }, { url: '/4.jpg' }, { url: '/clip.mp4', type: 'video' }] },
       { date: '2026-01-01', media: [{ url: '/1.jpg' }, { url: '/2.jpg' }, { url: '/1.jpg' }] },
     ] });

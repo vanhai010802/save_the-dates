@@ -3,11 +3,8 @@
 .film-static-enter,.film-static-enter *{animation:none!important}.film-static-enter .film-heart-path{stroke-dashoffset:0}
 
 
-.film-scene.film-leaving .film-copy,.film-scene.film-leaving .film-ornament,.film-scene.film-leaving .film-wish-sparks{visibility:hidden}
-/* Dissolve over the fully decoded previous frame; keep photos in one position. */
+/* Keep photos in one position as the album advances. */
 .film-scene{z-index:2;animation:film-dissolve .65s cubic-bezier(.22,.61,.36,1) both;will-change:opacity}
-.film-scene.film-leaving{z-index:1;animation:none;pointer-events:none}
-.film-scene.film-leaving .film-copy{visibility:visible;animation:film-copy-away .16s ease-out forwards!important}
 .film-kicker{animation:film-words .4s .2s both}
 .film-title{animation:film-words .5s .24s both}
 .film-description{animation:film-words .5s .3s both}
@@ -15,12 +12,9 @@
 .film-photo.film-variant-1 .film-photo-frame{transform:rotate(1.5deg)}
 .film-photo.film-variant-2{flex-direction:row}
 .film-media{transition:none}
-.film-paused .film-scene.film-leaving .film-copy{visibility:hidden}
 @keyframes film-dissolve{from{opacity:0}to{opacity:1}}
-@keyframes film-copy-away{from{opacity:1}to{opacity:0}}
 @keyframes film-photo-drift{from{translate:0 2px;scale:1}to{translate:0 -2px;scale:1.012}}
 @media(max-width:640px){.film-photo.film-variant-2{flex-direction:column}}
-@media(prefers-reduced-motion:reduce){.film-scene{animation:none!important}.film-scene.film-leaving .film-copy{visibility:hidden}}
 /* Use Vietnamese-capable upright type for names; avoid mixed italic glyphs. */
 .memory-film .film-signature{font-family:'Be Vietnam Pro','Quicksand','Segoe UI',sans-serif;font-style:normal;font-weight:400;font-size:clamp(14px,1.5vw,20px);line-height:1.9;letter-spacing:normal;word-break:normal;overflow-wrap:normal}
 .film-montage .film-photo-frame{flex:0 1 80%;width:80%;max-width:1000px;height:94%;padding:0;background:transparent;box-shadow:none;transform:none;animation:film-photo-drift var(--scene-duration) linear both}
@@ -31,10 +25,11 @@
 
 .film-awaiting .film-photo-wash{display:none}.film-photo.film-awaiting .film-photo-frame{visibility:hidden}.film-montage.film-awaiting{flex-direction:column;text-align:center}.film-montage.film-awaiting .film-photo-frame{display:none}
 
-/* Keep the words still; only photos dissolve as the album advances. */
+/* Fade out fully before mounting the next scene. Never stack photo frames. */
 .film-stage{background:radial-gradient(ellipse at 50% 40%,#49372c,#211e1b 75%)}
 .memory-film .film-scene{animation:none;background:transparent;will-change:auto}
 .memory-film .film-copy,.memory-film .film-copy *{animation:none!important;transition:none!important}
-.memory-film .film-scene.film-leaving .film-copy{visibility:hidden!important}
-.memory-film .film-scene:not(.film-leaving) .film-photo-frame{animation:film-dissolve .65s ease both,film-photo-drift var(--scene-duration) linear both}
+.memory-film .film-scene.film-leaving{animation:film-scene-away var(--film-fade-duration) ease forwards!important;pointer-events:none}
+.memory-film .film-scene:not(.film-leaving) .film-photo-frame{animation:film-dissolve var(--film-fade-duration) ease both,film-photo-drift var(--scene-duration) linear both}
+@keyframes film-scene-away{from{opacity:1}to{opacity:0}}
 @media(prefers-reduced-motion:reduce){.memory-film .film-scene:not(.film-leaving) .film-photo-frame{animation:none!important}}

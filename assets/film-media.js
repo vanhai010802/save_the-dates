@@ -1,5 +1,6 @@
 import { montageItems } from './montage-data.js';
 import { optimizedImageURL } from './image-delivery.js';
+import { filmMilestones } from './film-timeline.js';
 
 const entries = new Map(), queue = [];
 let active = 0;
@@ -80,7 +81,7 @@ export function loadFilmMedia(url, type = 'image', priority = 'high') {
 export function warmFilmMedia({ config = {}, milestones = [] } = {}) {
   // Snapshot the current data, so a later edit cannot mix two preload batches.
   const images = [
-    ...[...milestones].sort((a,b) => (a.date || '').localeCompare(b.date || '')).flatMap(memory => memory.media || []),
+    ...filmMilestones(milestones).flatMap(memory => memory.media || []),
     ...montageItems(config.anniversary_montage),
   ].filter(media => media.type !== 'video');
   const warm = () => {
