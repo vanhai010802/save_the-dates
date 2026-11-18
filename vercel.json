@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
   "images": {
     "sizes": [640, 1080],
     "qualities": [70],
@@ -18,6 +20,14 @@
   ],
   "redirects": [{ "source": "/admin", "destination": "/our-story", "permanent": false }],
   "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }]
+    },
+    {
+      "source": "/version.json",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
     {
       "source": "/api/data",
       "headers": [

@@ -1,5 +1,13 @@
 # Anniversary preview
 
+## Deployment updates and Safari cache
+
+Vercel runs `npm run build` and serves static files from `public/`; the root `api/` functions remain server-side. The build computes a content version from the source files, stamps both HTML pages, and adds that version to local JavaScript, CSS, and JSON URLs, including nested module imports and dynamically loaded styles. Source files are unchanged. HTML and assets revalidate, and `/version.json` uses `no-store`.
+
+Both pages check the version at startup, every minute while visible, and on `pageshow`, tab return, focus, or reconnection. A new version triggers a navigation preserving the route, query parameters, and fragment, with a version parameter to bypass stale HTML. Updates wait while a dialog, film, or management drawer is open or a form field has focus. Offline checks fail silently, and a repeated version cannot create a reload loop. This updates this site's resources without deleting Safari history, authentication, or saved settings.
+
+A tab that predates this updater needs one initial reload after deployment to receive it. Local `npm run dev` serves source files without update polling; `npm run build` generates the versioned production output for testing.
+
 Use Node.js 18 or newer. Run `npm ci` and `npm run dev`, then open http://localhost:4173.
 
 - `/`: anniversary cake, the existing memory album, and a timed film.
