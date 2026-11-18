@@ -9,13 +9,15 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
     <header class="film-header"><span>♡ &nbsp; OUR LITTLE LOVE STORY</span><button type="button" class="film-close" aria-label="Đóng thước phim">×</button></header>
     <div class="film-stage"></div>
     <div class="film-announcement" role="status" aria-live="polite"></div>
-    <footer class="film-controls"><div class="film-control-row"><div><button type="button" class="film-previous" aria-label="Cảnh trước">←</button><button type="button" class="film-play" aria-label="Tạm dừng thước phim">Ⅱ</button><button type="button" class="film-next" aria-label="Cảnh tiếp theo">→</button><span class="film-time"></span></div><div><button type="button" class="film-sound" aria-label="Tắt nhạc thước phim" aria-pressed="true">♫ <span>Nhạc bật</span></button><span class="film-scene-count"></span></div></div><input class="film-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Tiến trình thước phim"><div class="film-bottom-note"><span>MỖI KHOẢNH KHẮC, MỘT CHÚT YÊU THƯƠNG</span><span>Space: phát / dừng · ← →: chuyển cảnh</span></div></footer>`;
+    <footer class="film-controls"><div class="film-control-row"><div><button type="button" class="film-previous" aria-label="Cảnh trước">←</button><button type="button" class="film-play" aria-label="Tạm dừng thước phim">Ⅱ</button><button type="button" class="film-next" aria-label="Cảnh tiếp theo">→</button><span class="film-time"></span></div><div><button type="button" class="film-speed" aria-label="Tốc độ phát: 1×. Bấm để đổi sang 1.5×" title="Đổi tốc độ phát">1×</button><button type="button" class="film-sound" aria-label="Tắt nhạc thước phim" aria-pressed="true">♫ <span>Nhạc bật</span></button><span class="film-scene-count"></span></div></div><input class="film-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Tiến trình thước phim"><div class="film-bottom-note"><span>MỖI KHOẢNH KHẮC, MỘT CHÚT YÊU THƯƠNG</span><span>Space: phát / dừng · ← →: chuyển cảnh</span></div></footer>`;
   document.body.append(dialog);
   const $ = selector => dialog.querySelector(selector);
   const stage = $('.film-stage'), audio = audioElement;
   stage.style.setProperty('--film-fade-duration',`${FILM_FADE_MS}ms`);
   let scenes = [], index = 0, elapsed = 0, total = 0, offsets = [], playing = false, ended = false;
   let frame = 0, lastTime = 0, sound = true, audioWasPlaying = false, token = 0, revealTimer;
+  const speeds = [1, 1.5, 2];
+  let speed = 1;
   const make = (tag, className, text) => { const el=document.createElement(tag);el.className=className;if(text!==undefined)el.textContent=String(text).normalize('NFC');return el; };
   const clock = ms => `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
   function buildScenes() {
@@ -57,7 +59,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         // underneath a transparent incoming frame, even during rapid seeking.
         stage.replaceChildren(card);
         const video=card.querySelector('video');
-        if(video){video.currentTime=Math.min(elapsed/1000,Math.max(0,video.duration-.1));if(playing)video.play().catch(()=>{});}
+        if(video){video.playbackRate=speed;video.currentTime=Math.min(elapsed/1000,Math.max(0,video.duration-.1));if(playing)video.play().catch(()=>{});}
       };
       const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if(old && playing && !reducedMotion)revealTimer=setTimeout(reveal,FILM_FADE_MS);
@@ -72,6 +74,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
         if(!media || currentToken!==token || !dialog.open)return;
         media.hidden=false;
         if(media.tagName==='VIDEO'){
+          media.playbackRate=speed;
           if(Number.isFinite(media.duration) && media.duration>0){
             // Uploaded clips may not include duration metadata in story JSON.
             scene.duration=Math.max(1000,media.duration*1000);
@@ -117,7 +120,7 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   function tick(now){
     if(!dialog.open)return;
     if(playing){
-      const position=Math.min(total,offsets[index]+elapsed+Math.max(0,now-lastTime));
+      const position=Math.min(total,offsets[index]+elapsed+Math.max(0,now-lastTime)*speed);
       const next=offsets.findLastIndex(start=>start<=position);
       if(next!==index)showScene(next,position-offsets[next]);else elapsed=position-offsets[index];
       if(position>=total){
@@ -132,6 +135,13 @@ export function createMemoryFilm(getData, audioElement = document.getElementById
   $('.film-close').addEventListener('click',()=>dialog.close());
   $('.film-previous').addEventListener('click',()=>showScene(index-1));$('.film-next').addEventListener('click',()=>showScene(index+1));
   $('.film-sound').addEventListener('click',()=>{sound=!sound;updateSound();if(sound)playAudio();else audio.pause();});
+  $('.film-speed').addEventListener('click',()=>{
+    speed=speeds[(speeds.indexOf(speed)+1)%speeds.length];
+    $('.film-speed').textContent=`${speed}×`;
+    $('.film-speed').setAttribute('aria-label',`Tốc độ phát: ${speed}×. Bấm để đổi sang ${speeds[(speeds.indexOf(speed)+1)%speeds.length]}×`);
+    stage.querySelectorAll('video').forEach(video=>{video.playbackRate=speed;});
+    lastTime=performance.now();
+  });
   $('.film-seek').addEventListener('input',e=>{const target=Number(e.target.value)/1000*total;const next=offsets.findLastIndex(start=>start<=target);showScene(next,Math.min(target-offsets[next],scenes[next].duration));});
   dialog.addEventListener('keydown',e=>{if($('.film-play').disabled && e.key!=='Escape')return;if(e.target.matches('input,button') && (e.code==='Space' || e.key==='Enter'))return;if(e.code==='Space'){e.preventDefault();toggle();}else if(e.key==='ArrowLeft' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index-1);}else if(e.key==='ArrowRight' && e.target.tagName!=='INPUT'){e.preventDefault();showScene(index+1);}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden && dialog.open)setPlaying(false);});

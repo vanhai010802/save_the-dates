@@ -25,4 +25,6 @@ Only milestones dated strictly before **2026-10-19** play, in chronological orde
 
 Immediately before “Mình còn cả mai sau”, **Những khoảnh khắc của đôi ta** plays the supplied Hh folder: 13 photos and 2 videos. Photos last 3 seconds; videos retain their recorded durations. This sequence has no photo captions and creates no milestones. Its heading is omitted when no montage media is available.
 
+The speed button beside the music control cycles through 1×, 1.5×, and 2×. It changes the timeline and embedded video playback together, including clips loaded later. Pause, seek, and replay preserve the selected speed. Background music keeps its original tempo.
+
 Web-ready copies are stored in `assets/montage/` with their ordering and video durations in `manifest.json`. Photos were converted to JPEG with EXIF orientation applied and maximum dimensions of 2048 pixels. The two MOV clips were converted to H.264/AAC MP4 with fast-start metadata. Source files were left unchanged. Both frontends load the manifest directly, without uploading the supplied files to production or modifying the production story data. Deploying the repository will serve these assets with the site.
