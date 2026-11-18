@@ -18,6 +18,7 @@
   ================================================================
   -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="/assets/memory-film.css">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -133,6 +134,31 @@
 
     .section-title { text-align: center; font-size: clamp(2rem, 5vw, 3rem); color: var(--coral); margin-bottom: 10px; }
     .section-sub { text-align: center; opacity: 0.55; margin-bottom: 48px; font-size: 1rem; }
+
+    .anniversary-card {
+      display: flex; align-items: center; gap: clamp(20px, 4vw, 36px);
+      width: 100%; max-width: 720px; margin: 0 auto; padding: clamp(20px, 4vw, 32px);
+      border: 1px solid #ffd5e0; border-radius: 24px; background: #ffffffc9;
+      color: var(--ink); text-align: left; font: inherit; cursor: pointer;
+      box-shadow: var(--shadow); transition: transform .2s, box-shadow .2s;
+    }
+    .anniversary-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .anniversary-card:focus-visible { outline: 3px solid var(--coral); outline-offset: 5px; }
+    .anniversary-cover {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      flex: 0 0 clamp(88px, 22vw, 150px); aspect-ratio: 1; border-radius: 18px;
+      background: linear-gradient(145deg, #ffe1ea, #fff0da); color: var(--coral-dark);
+    }
+    .anniversary-cover strong { font-size: clamp(2.5rem, 7vw, 4rem); line-height: 1.1; }
+    .anniversary-cover small { font-size: .8rem; letter-spacing: 3px; margin-top: 5px; }
+    .anniversary-copy { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .anniversary-copy strong { color: var(--coral-dark); font-size: clamp(1.1rem, 3vw, 1.5rem); }
+    .anniversary-copy > span { font-size: .9rem; line-height: 1.8; color: var(--muted); }
+    .anniversary-copy .anniversary-play { color: var(--coral-dark); font-weight: 700; }
+    .memory-film { --serif: 'Quicksand', Georgia, serif; font-family: 'Quicksand', sans-serif; }
+    .memory-film .film-title { line-height: 1.4; }
+    body:has(.memory-film[open]) { overflow: hidden; }
+    @media (prefers-reduced-motion: reduce) { .anniversary-card { transition: none; } }
 
     /* Timeline */
     .timeline { max-width: 820px; margin: 0 auto; position: relative; padding: 10px 0; }
@@ -634,7 +660,22 @@
         <div class="counter-card"><div class="counter-num" id="seconds">00</div><div class="counter-label">Giây</div></div>
       </div>
 
-      <a href="#journey" class="scroll-cue">↓ Cuộn xuống xem hành trình yêu</a>
+      <a href="#anniversaries" class="scroll-cue">↓ Cuộn xuống xem kỷ niệm của chúng mình</a>
+    </section>
+
+    <section id="anniversaries" aria-labelledby="anniversaries-title">
+      <h2 id="anniversaries-title" class="section-title script">Kỷ niệm</h2>
+      <p class="section-sub">Những dấu mốc yêu thương của chúng mình ♡</p>
+      <div class="anniversary-list">
+        <button type="button" class="anniversary-card" id="six-month-memory" aria-label="Xem thước phim kỷ niệm 6 tháng">
+          <span class="anniversary-cover" aria-hidden="true"><strong>06</strong><small>THÁNG ♡</small></span>
+          <span class="anniversary-copy">
+            <strong>Kỷ niệm 6 tháng</strong>
+            <span>Nửa năm bên nhau, một thước phim giữ lại những khoảnh khắc của đôi mình.</span>
+            <span class="anniversary-play">▷ Xem thước phim</span>
+          </span>
+        </button>
+      </div>
     </section>
 
     <section id="journey">
@@ -711,7 +752,7 @@
     <div class="modal-card">
       <h3>Nhập mật khẩu admin</h3>
       <form id="auth-form">
-        <input type="password" id="auth-pass" autocomplete="current-password" autofocus>
+        <input type="text" id="auth-pass" aria-label="Mật khẩu admin" autocomplete="current-password" autocapitalize="none" spellcheck="false" autofocus>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="auth-cancel">Đóng</button>
           <button type="submit" class="btn btn-primary" id="auth-submit">Mở khóa</button>
@@ -733,8 +774,6 @@
       <button class="drawer-tab" data-tab="list" role="tab">Danh sách</button>
     </div>
     <div class="drawer-body" id="drawer-body"></div>
-    <div style="padding:12px 20px;border-top:1px solid #ffe1e8"><button class="btn btn-primary" id="drawer-test-cake" style="width:100%">🎂 Xem lại bánh kem</button></div>
-    <div style="padding:0 20px 12px"><button class="btn btn-ghost" id="drawer-reset-bk" style="width:100%">↻ Reset BK</button></div>
     <div class="drawer-foot">
       <button class="btn btn-ghost" id="drawer-logout">Đăng xuất</button>
       <button class="btn btn-danger" id="drawer-relock">Khóa lại trang</button>
@@ -744,12 +783,19 @@
   <div id="toast" class="toast" hidden></div>
 
   <script type="module">
-    import { startAnniversaryCake, createTogetherCake } from '/assets/together-presence.js';
+    import { createMemoryFilm } from '/assets/memory-film.js';
     import { withMontageAssets } from '/assets/montage-data.js';
     import { warmFilmMedia } from '/assets/film-media.js';
     import { setOptimizedImageSource } from '/assets/image-delivery.js';
     // ============== STATE ==============
     const state = { config: {}, milestones: [], unlocked: false, unlocked_at: null };
+    let sixMonthFilm;
+    document.getElementById('six-month-memory').addEventListener('click', () => {
+      sixMonthFilm ??= createMemoryFilm(() => ({
+        ...state, config: { ...state.config, anniversary_months: 6 },
+      }), document.getElementById('bg-music'));
+      sixMonthFilm.open();
+    });
 
     // ============== HELPERS ==============
     function escapeHtml(s) {
@@ -1083,7 +1129,7 @@
       authSubmit.disabled = true;
       try {
         const ok = await verifyPasswordAttempt(pass);
-        if (!ok) { showToast('Sai mật khẩu', true); authPass.value = ''; return; }
+        if (!ok) { showToast('Sai mật khẩu', true); authPass.focus(); return; }
         setPass(pass);
         authModal.hidden = true;
         openDrawer();
@@ -1106,16 +1152,6 @@
       document.body.style.overflow = '';
     }
     drawerClose.addEventListener('click', closeDrawer);
-    let testCelebration;
-    document.getElementById('drawer-test-cake').addEventListener('click',()=>{
-      closeDrawer();
-      testCelebration ??= createTogetherCake(()=>state,{test:true,audioElement:document.getElementById('bg-music')});
-      testCelebration.open();
-    });
-    document.getElementById('drawer-reset-bk').addEventListener('click',()=>{
-      closeDrawer();
-      window.dispatchEvent(new Event('bk-reset'));
-    });
     drawerBackdrop.addEventListener('click', closeDrawer);
     drawerLogout.addEventListener('click', () => { clearPass(); closeDrawer(); });
     drawerTabs.forEach(b => b.addEventListener('click', () => activateTab(b.dataset.tab)));
@@ -1740,7 +1776,6 @@
     async function init() {
       try {
         await loadData();
-        startAnniversaryCake(() => state);
         document.getElementById('loader').hidden = true;
         if (!state.unlocked) {
           showLockScreen();

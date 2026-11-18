@@ -11,14 +11,14 @@ A tab that predates this updater needs one initial reload after deployment to re
 Use Node.js 18 or newer. Run `npm ci` and `npm run dev`, then open http://localhost:4173.
 
 - `/`: anniversary cake, the existing memory album, and a timed film.
-- `/our-story`: the original Counting Love page and its original management drawer (pencil button).
+- `/our-story`: Counting Love, a dedicated **Kỷ niệm** section above **Hành trình yêu**, and the management drawer (pencil button). The only anniversary entry is **Kỷ niệm 6 tháng**, opening the existing film directly; its month count stays six independently of the general anniversary configuration.
 - `/admin` redirects to `/our-story`; the separate admin page was removed.
 
 The local preview reads the public existing website data, and edits only a temporary in-memory copy. The original drawer accepts `demo` in the local preview. Production uses the existing ADMIN_PASSWORD and Blob token.
 
-## Automatic cake and replay
+## Anniversary film
 
-The cake automatically opens once globally across all devices. Each page makes one `/api/cake` claim; an atomic, non-overwritable Blob marker grants the first device its automatic opening. Other devices can always use **Xem lại bánh kem & kỷ niệm** or the panel replay button. **Reset bánh kem** requires a server-verified password and deletes the shared marker. Only the first visit after reset automatically opens again. There is no heartbeat or online check, and cake/film do not require Redis. If Blob is blocked, manual replay works but global claim/reset must wait until the store permits writes again.
+Neither page starts the automatic cake flow or shows the old cake replay/reset controls. On `/our-story`, select **Kỷ niệm 6 tháng** to play or replay the film directly. The management drawer no longer contains cake or reset buttons. The admin password field displays the entered characters, disables capitalization and spellcheck, and retains an incorrect entry so it can be corrected. The standalone anniversary page retains its existing hero and film button.
 
 Story data is read directly from its known original Blob JSON URL. During a 403 block, the site renders a clearly labelled partial, read-only backup. Once unblocked, reloading reads original metadata and image URLs without importing a partial backup over the original. See [cake-once.md](cake-once.md).
 
