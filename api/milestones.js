@@ -7,6 +7,7 @@ import {
   verifyPassword,
   writeData,
 } from './_lib.js';
+import { deleteR2Prefix, isR2MediaURL } from './_r2.js';
 
 function sanitizeMilestone(input) {
   const id = String(input.id || '').trim();
@@ -18,7 +19,7 @@ function sanitizeMilestone(input) {
   const cleanMedia = media.map(m => {
     const url = String(m?.url || '');
     const type = m?.type === 'video' ? 'video' : 'image';
-    if (!/^https?:\/\//.test(url)) throw new HttpError(400, 'media.url không hợp lệ');
+    if (!/^https?:\/\//.test(url) && !isR2MediaURL(url)) throw new HttpError(400, 'media.url không hợp lệ');
     return { url, type, ...(m?.caption ? { caption: String(m.caption).slice(0, 500) } : {}) };
   });
 
@@ -60,8 +61,12 @@ export default async function handler(req, res) {
         throw new HttpError(404, 'Không tìm thấy mốc với id đó');
       }
       await writeData(data);
-      try { await deletePrefix(`milestones/${id}/`); }
-      catch (e) { console.error('deletePrefix failed:', e); }
+      const prefix = `milestones/${id}/`;
+      const cleanups = [deleteR2Prefix(prefix)];
+      if (process.env.BLOB_READ_WRITE_TOKEN) cleanups.push(deletePrefix(prefix));
+      for (const result of await Promise.allSettled(cleanups)) {
+        if (result.status === 'rejected') console.error('Milestone media cleanup failed:', result.reason);
+      }
       sendJson(res, 200, { ok: true });
       return;
     }

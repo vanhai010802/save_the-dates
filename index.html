@@ -907,18 +907,17 @@
       throw new Error(err.error || `auth failed: ${res.status}`);
     }
 
-    // ============== BLOB UPLOAD HELPER ==============
+    // ============== MEDIA UPLOAD ==============
     let _blobClient = null;
     async function getBlobClient() {
       if (_blobClient) return _blobClient;
       _blobClient = await import('/assets/blob-client.js');
       return _blobClient;
     }
-    async function uploadBlob(file, pathname, onProgress) {
+    async function uploadMedia(file, pathname, onProgress) {
       const pass = getPass();
       if (!pass) throw new Error('Chưa đăng nhập');
-      // iOS file picker đôi khi trả file.type rỗng cho ảnh HEIC từ camera roll
-      // — server-side allowedContentTypes là image/* nên cần đoán từ đuôi file.
+      // iOS có thể trả file.type rỗng cho ảnh HEIC từ camera roll.
       let contentType = file.type;
       if (!contentType) {
         const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -929,24 +928,45 @@
         }[ext];
         contentType = guess || 'application/octet-stream';
       }
-      const { upload } = await getBlobClient();
-      console.log('[uploadBlob] start', pathname, file.size, 'bytes,', contentType);
-      try {
-        const result = await upload(pathname, file, {
-          access: 'public',
-          handleUploadUrl: '/api/blob-upload',
-          contentType,
-          clientPayload: pass,
-          onUploadProgress: ({ percentage }) => {
-            if (typeof onProgress === 'function') onProgress(percentage);
-          },
+      const response = await fetch('/api/blob-upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-password': pass },
+        body: JSON.stringify({ action: 'prepare', pathname, contentType, size: file.size }),
+      });
+      const uploadInfo = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(uploadInfo.error || `Không chuẩn bị được upload (${response.status})`);
+
+      if (uploadInfo.provider === 'r2') {
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', uploadInfo.uploadUrl);
+          xhr.setRequestHeader('Content-Type', contentType);
+          if (onProgress) {
+            xhr.upload.onprogress = event => {
+              if (event.lengthComputable) onProgress(event.loaded / event.total * 100);
+            };
+          }
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Cloudflare R2 từ chối upload (${xhr.status})`));
+          };
+          xhr.onerror = () => reject(new Error('Không kết nối được Cloudflare R2 để upload'));
+          xhr.send(file);
         });
-        console.log('[uploadBlob] done', pathname);
-        return result;
-      } catch (err) {
-        console.error('[uploadBlob] failed', pathname, err);
-        throw err;
+        onProgress?.(100);
+        return { url: uploadInfo.url, contentType };
       }
+
+      if (uploadInfo.provider !== 'vercel') throw new Error('Server chưa trả về kho upload hợp lệ');
+      const { upload } = await getBlobClient();
+      const result = await upload(pathname, file, {
+        access: 'public',
+        handleUploadUrl: '/api/blob-upload',
+        contentType,
+        clientPayload: pass,
+        onUploadProgress: ({ percentage }) => onProgress?.(percentage),
+      });
+      return { url: result.url, contentType };
     }
 
     // ============== RENDER HERO + TIMELINE + QUOTE ==============
@@ -1249,13 +1269,13 @@
         if (p1File) {
           btn.textContent = 'Upload avatar 1…';
           const ext = (p1File.name.split('.').pop() || 'jpg').toLowerCase();
-          const r = await uploadBlob(p1File, `avatars/p1-${Date.now()}.${ext}`);
+          const r = await uploadMedia(p1File, `avatars/p1-${Date.now()}.${ext}`);
           patch.person1_avatar_url = r.url;
         }
         if (p2File) {
           btn.textContent = 'Upload avatar 2…';
           const ext = (p2File.name.split('.').pop() || 'jpg').toLowerCase();
-          const r = await uploadBlob(p2File, `avatars/p2-${Date.now()}.${ext}`);
+          const r = await uploadMedia(p2File, `avatars/p2-${Date.now()}.${ext}`);
           patch.person2_avatar_url = r.url;
         }
         btn.textContent = 'Đang lưu config…';
@@ -1415,10 +1435,10 @@
           btn.textContent = `Upload ${i + 1}/${pendingFiles.length}…`;
           const safe = slugifyFilename(item.file.name);
           const pathname = `milestones/${id}/${safe}`;
-          const r = await uploadBlob(item.file, pathname, p => {
+          const r = await uploadMedia(item.file, pathname, p => {
             item.progress = p; renderFileList();
           });
-          media.push({ url: r.url, type: detectMediaType(item.file.type) });
+          media.push({ url: r.url, type: detectMediaType(r.contentType) });
         }
         btn.textContent = 'Đang lưu mốc…';
         const res = await fetch('/api/milestones', {

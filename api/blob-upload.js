@@ -1,8 +1,8 @@
 import { handleUpload } from '@vercel/blob/client';
-import { timingSafeEqual } from 'node:crypto';
 import {
-  readJsonBody, sendJson, handleError, HttpError,
+  readJsonBody, sendJson, handleError, HttpError, verifyPassword,
 } from './_lib.js';
+import { createR2Upload, isMediaKey, isMediaType, MAX_MEDIA_BYTES, r2Storage } from './_r2.js';
 
 export default async function handler(req, res) {
   try {
@@ -11,24 +11,31 @@ export default async function handler(req, res) {
     }
     const body = await readJsonBody(req);
 
+    if (body?.action === 'prepare') {
+      verifyPassword(req);
+      res.setHeader('Cache-Control', 'no-store');
+      const r2 = r2Storage();
+      if (!r2) return sendJson(res, 200, { provider: 'vercel' });
+      const { pathname, contentType, size } = body;
+      if (!isMediaKey(pathname)) throw new HttpError(400, 'Tên tệp không hợp lệ');
+      if (!isMediaType(contentType)) throw new HttpError(400, 'Chỉ hỗ trợ ảnh và video');
+      if (!Number.isSafeInteger(size) || size < 1) throw new HttpError(400, 'Tệp trống hoặc không hợp lệ');
+      if (size > MAX_MEDIA_BYTES) throw new HttpError(413, 'Tệp vượt quá 100 MB');
+      return sendJson(res, 200, { provider: 'r2', ...await createR2Upload(r2, pathname, contentType, size) });
+    }
+
     const jsonResponse = await handleUpload({
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload, _multipart) => {
-        const provided = String(clientPayload || '');
-        const expected = process.env.ADMIN_PASSWORD || '';
-        if (!expected) throw new HttpError(500, 'Server chưa cấu hình ADMIN_PASSWORD');
-        const a = Buffer.from(provided);
-        const b = Buffer.from(expected);
-        if (a.length !== b.length || !timingSafeEqual(a, b)) {
-          throw new HttpError(401, 'Sai mật khẩu');
-        }
+        verifyPassword({ headers: { 'x-admin-password': clientPayload } });
+        if (r2Storage()) throw new HttpError(409, 'Kho upload đã chuyển sang R2. Hãy tải lại trang.');
         if (!/^(avatars\/|milestones\/)/.test(pathname)) {
           throw new HttpError(400, 'Pathname không hợp lệ');
         }
         return {
           allowedContentTypes: ['image/*', 'video/*'],
-          maximumSizeInBytes: 100 * 1024 * 1024,
+          maximumSizeInBytes: MAX_MEDIA_BYTES,
           addRandomSuffix: false,
           allowOverwrite: true,
         };

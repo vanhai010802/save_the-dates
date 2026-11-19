@@ -37,6 +37,11 @@ createServer(async(req,res)=>{
   if(url.pathname==='/admin' || url.pathname==='/admin.html'){res.writeHead(302,{Location:'/our-story'});res.end();return;}
   if(url.pathname.startsWith('/__preview/media/')){const item=uploads.get(url.pathname);if(!item){res.writeHead(404);res.end();return;}res.setHeader('Content-Type',item.type);res.end(item.body);return;}
   if(url.pathname.startsWith('/api/')){
+    if (url.pathname === '/api/media' && (req.method === 'GET' || req.method === 'HEAD')) {
+      res.writeHead(307, { Location: `https://savethedates.vercel.app/api/media${url.search}` });
+      res.end();
+      return;
+    }
     res.setHeader('Content-Type','application/json; charset=utf-8');
     if(url.pathname==='/api/cake' && req.method==='POST'){
       try{
